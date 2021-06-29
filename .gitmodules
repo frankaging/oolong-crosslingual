@@ -1,0 +1,3 @@
+[submodule "submodules/gdtreebank"]
+	path = submodules/gdtreebank
+	url = git@github.com:frankaging/gdtreebank.git
