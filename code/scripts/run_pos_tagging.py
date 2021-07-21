@@ -117,9 +117,13 @@ if __name__ == "__main__":
                 break
         
         chunks = list(partition(sentences, args.batch_size))
-        examples = []
         total_chunk = len(chunks)
         count = 0
+        
+        sentence_strs = []
+        upos_strs = []
+        xpos_strs = []
+        
         for chunk in chunks:
             logging.info(f"processing: {count+1}/{total_chunk}.")
             in_docs = [stanza.Document([], text=d) for d in chunk]
@@ -136,34 +140,30 @@ if __name__ == "__main__":
                 sentence_str = ",".join(sentence_str)
                 upos_str = ",".join(upos_str)
                 xpos_str = ",".join(xpos_str)
-                example = {
-                    "sentence_str":sentence_str,
-                    "upos_str":upos_str,
-                    "xpos_str":xpos_str,
-                }
-                examples += [example]
+                sentence_strs += [sentence_str]
+                upos_strs += [upos_str]
+                xpos_strs += [xpos_str]
             count += 1
+        examples = {
+            "sentence_str":sentence_strs,
+            "upos_str":upos_strs,
+            "xpos_str":xpos_strs,
+        }
         return examples
     
-    examples_train = preprocess(wiki_datasets, args, "train")
-    examples_validation = preprocess(wiki_datasets, args, "validation")
-    examples_test = preprocess(wiki_datasets, args, "test")
+    examples_train = Dataset.from_dict(preprocess(wiki_datasets, args, "train"))
+    examples_validation = Dataset.from_dict(preprocess(wiki_datasets, args, "validation"))
+    examples_test = Dataset.from_dict(preprocess(wiki_datasets, args, "test"))
     
-    dataset_examples = {
+    dataset_examples = DatasetDict({
         "train": examples_train,
         "validation": examples_validation,
         "test": examples_test,
-    }
+    })
     dataset = Dataset.from_dict(dataset_examples)
     logging.info("Saving Pos-tagging with data to:")
     logging.info(args.output_dir)
     dataset.save_to_disk(args.output_dir)
     total_count = len(examples_train) + len(examples_validation) + len(examples_test)
     logging.info(f"Collected in total {total_count} examples.")
-
-
-# In[ ]:
-
-
-
 
