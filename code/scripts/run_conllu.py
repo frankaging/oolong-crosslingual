@@ -121,7 +121,7 @@ if __name__ == "__main__":
     write_mode = "a+"
     
     # Stanza
-    nlp = stanza.Pipeline('en', processors='tokenize,pos')
+    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos', tokenize_pretokenized=True)
     logging.info("Finish loading Stanza in.")
     
     def preprocess(wiki_datasets, args, split):
@@ -131,7 +131,11 @@ if __name__ == "__main__":
         count = 0
         for s in wiki_datasets[split]:
             if len(s["text"].strip()) > 0:
-                sentences += [s["text"]]
+                clean_s = []
+                for t in s["text"].strip().split(" "):
+                    if len(t.strip()) > 0:
+                        clean_s += [t]
+                sentences += [clean_s] # we strip it, and split by space.
                 count += 1
                 if count == args.max_number_of_examples:
                     break
@@ -149,10 +153,9 @@ if __name__ == "__main__":
         
         for chunk in chunks:
             logging.info(f"processing: {count+1}/{total_chunk}.")
-            in_docs = [stanza.Document([], text=d) for d in chunk]
-            docs = nlp(in_docs)
-            for i in range(len(docs)):
-                CoNLL.write_doc2conll(docs[i], output_file, mode=write_mode)
+            doc = nlp(chunk)
+            for i, sentence in enumerate(doc.sentences):
+                CoNLL.write_doc2conll(sentence.doc, output_file, mode=write_mode)
             count += 1
 
     preprocess(wiki_datasets, args, "train")

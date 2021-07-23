@@ -102,7 +102,7 @@ if __name__ == "__main__":
     wiki_datasets = DatasetDict.load_from_disk(args.data_dir)
     
     # Stanza
-    nlp = stanza.Pipeline('en', processors='tokenize,pos')
+    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos', tokenize_pretokenized=True)
     logging.info("Finish loading Stanza in.")
     
     def preprocess(wiki_datasets, args, split):
@@ -111,10 +111,15 @@ if __name__ == "__main__":
         sentences = []
         count = 0
         for s in wiki_datasets[split]:
-            sentences += [s["text"]]
-            count += 1
-            if count == args.max_number_of_examples:
-                break
+            if len(s["text"].strip()) > 0:
+                clean_s = []
+                for t in s["text"].strip().split(" "):
+                    if len(t.strip()) > 0:
+                        clean_s += [t]
+                sentences += [clean_s] # we strip it, and split by space.
+                count += 1
+                if count == args.max_number_of_examples:
+                    break
         
         chunks = list(partition(sentences, args.batch_size))
         total_chunk = len(chunks)
@@ -126,20 +131,15 @@ if __name__ == "__main__":
         
         for chunk in chunks:
             logging.info(f"processing: {count+1}/{total_chunk}.")
-            in_docs = [stanza.Document([], text=d) for d in chunk]
-            docs = nlp(in_docs)
-            for i in range(len(docs)):
+            doc = nlp(chunk)
+            for i, sentence in enumerate(doc.sentences):
                 sentence_str = []
                 upos_str = []
                 xpos_str = []
-                for sent in docs[i].sentences:
-                    for word in sent.words:
-                        sentence_str += [word.text]
-                        upos_str += [word.upos]
-                        xpos_str += [word.xpos]
-                sentence_str = ",".join(sentence_str)
-                upos_str = ",".join(upos_str)
-                xpos_str = ",".join(xpos_str)
+                for token in sentence.tokens:
+                    sentence_str += [token.text]
+                    upos_str += [token.words[0].upos]
+                    xpos_str += [token.words[0].xpos]
                 sentence_strs += [sentence_str]
                 upos_strs += [upos_str]
                 xpos_strs += [xpos_str]
@@ -155,12 +155,11 @@ if __name__ == "__main__":
     examples_validation = Dataset.from_dict(preprocess(wiki_datasets, args, "validation"))
     examples_test = Dataset.from_dict(preprocess(wiki_datasets, args, "test"))
     
-    dataset_examples = DatasetDict({
+    dataset = DatasetDict({
         "train": examples_train,
         "validation": examples_validation,
         "test": examples_test,
     })
-    dataset = Dataset.from_dict(dataset_examples)
     logging.info("Saving Pos-tagging with data to:")
     logging.info(args.output_dir)
     dataset.save_to_disk(args.output_dir)
