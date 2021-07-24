@@ -85,6 +85,13 @@ if __name__ == "__main__":
     except:
         is_jupyter = False
     
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    n_gpu = torch.cuda.device_count()
+    if n_gpu > 0:
+        torch.cuda.manual_seed_all(args.seed)
+    
     # Create output directory if not exists.
     pathlib.Path(args.output_dir).mkdir(parents=True, exist_ok=True) 
     
