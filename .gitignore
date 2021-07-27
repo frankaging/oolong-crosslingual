@@ -1,3 +1,4 @@
+.DS_Store
 huggingface_cache/
 data-files/
 # Byte-compiled / optimized / DLL files
