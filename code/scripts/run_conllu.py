@@ -59,6 +59,18 @@ def arg_parse():
                         help='Whether to resume for this file.')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed.')
+    parser.add_argument("--include_train",
+                       default=False,
+                       action='store_true',
+                       help="Whether to include train.")  
+    parser.add_argument("--include_test",
+                       default=False,
+                       action='store_true',
+                       help="Whether to include test.")  
+    parser.add_argument("--include_validation",
+                       default=False,
+                       action='store_true',
+                       help="Whether to run eval on the test set.")  
     parser.set_defaults(
         # Exp management:
         seed=42,
@@ -89,6 +101,10 @@ if __name__ == "__main__":
     except:
         is_jupyter = False
         
+    if not args.include_train and not args.include_test and not args.include_validation:
+        logging.error("Need to at least specify a single partition.")
+        assert False
+
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
@@ -107,6 +123,9 @@ if __name__ == "__main__":
     )
     logger = logging.getLogger(__name__)
     logging.getLogger().addHandler(logging.StreamHandler(os.sys.stdout))
+    
+    logging.info("Args:")
+    logging.info(args)
     
     logging.info("Running conllu transformation with data lives in:")
     logging.info(args.data_dir)
@@ -131,7 +150,7 @@ if __name__ == "__main__":
     write_mode = "a+"
     
     # Stanza
-    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos')
+    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos', tokenize_no_ssplit=True)
     logging.info("Finish loading Stanza in.")
     
     def preprocess(wiki_datasets, args, split):
@@ -144,7 +163,7 @@ if __name__ == "__main__":
                 clean_s = []
                 for t in s["text"].strip().split(" "):
                     if len(t.strip()) > 0:
-                        clean_s += [t]
+                        clean_s += [t.strip()]
                 sentences += [" ".join(clean_s)] # we strip it, and split by space.
                 count += 1
                 if count == args.max_number_of_examples:
@@ -168,10 +187,13 @@ if __name__ == "__main__":
             for i in range(len(docs)):
                 CoNLL.write_doc2conll(docs[i], output_file, mode=write_mode)
             count += 1
-
-    preprocess(wiki_datasets, args, "train")
-    preprocess(wiki_datasets, args, "validation")
-    preprocess(wiki_datasets, args, "test")
+            
+    if args.include_train:
+        preprocess(wiki_datasets, args, "train")
+    if args.include_validation:
+        preprocess(wiki_datasets, args, "validation")
+    if args.include_test:
+        preprocess(wiki_datasets, args, "test")
     
     logging.info("Saved Pos-tagging with data to:")
     logging.info(args.output_dir)
