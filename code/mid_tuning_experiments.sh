@@ -19,3 +19,8 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python run_mid_tuning.py \
 --warmup_ratio 0.1 \
 --inoculation_percentage 1.0
 # random seeds = {42, 62, 82}
+# train_file = {
+#    ../data-files/wikitext-15M,
+#    ../data-files/wikitext-15M-en~fr@N~fr@V,
+#    
+# } 
