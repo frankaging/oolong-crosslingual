@@ -158,6 +158,9 @@ class DataTrainingArguments:
             "If False, will pad the samples dynamically when batching to the maximum length in the batch."
         },
     )
+    inoculation_percentage: float = field(
+        default=1,0, metadata={"help": "Ratio of training data to include in training"}
+    )
 
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
@@ -196,12 +199,13 @@ def main():
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}".format(
+    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}".format(
         date_time,
         model_args.model_name_or_path,
         model_args.tokenizer_name,
         training_args.seed,
         data_args.train_file.split("/")[-1].split(".")[0],
+        data_args.inoculation_percentage
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -314,6 +318,15 @@ def main():
         raise ValueError("This code requires a training/validation file.")
 
     datasets = DatasetDict.load_from_disk(data_args.train_file)
+    
+    if data_args.inoculation_percentage != 1.0:
+        logger.info(f"WARNING: you are downsampling your training data with a ratio of {data_args.inoculation_percentage}.")
+        inoculation_sample_size = int(len(datasets["train"]) * data_args.inoculation_percentage)
+        datasets["train"] = datasets["train"].shuffle(seed=training_args.seed)
+        inoculation_train_df = datasets["train"].select(range(inoculation_sample_size))
+        # overwrite
+        datasets["train"] = inoculation_train_df
+    
     # Preprocessing the datasets.
     # First we tokenize all the texts.
     if training_args.do_train:
