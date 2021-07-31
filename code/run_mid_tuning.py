@@ -185,7 +185,7 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
+        
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -203,7 +203,33 @@ def main():
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
-
+    
+    # We directly infer the steps to take upfront, so it is a fair 
+    # comparision between different conditions of runs.
+    
+    # Our largest dataset is the original wiki-text data.
+    # Loading it to memory to determine the steps.
+    logger.info("Preloading largest dataset here to determine the step size.")
+    LARGEST_DATASET = "../data-files/wikitext-15M/"
+    wiki_datasets = DatasetDict.load_from_disk("../data-files/wikitext-15M/")
+    NUM_MAX_STEP = (len(wiki_datasets["train"]))/(training_args.n_gpu*training_args.per_device_train_batch_size)
+    # Overwrite.
+    training_args.max_steps = int(NUM_MAX_STEP)
+    logger.warning(f"SETTING: training_args.max_steps={training_args.max_steps}")
+    
+    logger.info("Generating the run name for WANDB for better experiment tracking.")
+    import datetime
+    date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
+    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}".format(
+        date_time,
+        model_args.model_name_or_path,
+        model_args.tokenizer_name,
+        training_args.seed,
+        data_args.train_file.split("/")[-1].split(".")[0],
+    )
+    training_args.run_name = run_name
+    logger.info(f"WANDB RUN NAME: {training_args.run_name}")
+    
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
@@ -293,7 +319,7 @@ def main():
     else:
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
-
+    
     return
     
     if data_args.line_by_line:
