@@ -186,37 +186,13 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
         
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
-            "Use --overwrite_output_dir to overcome."
-        )
-
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
-    
-    # We directly infer the steps to take upfront, so it is a fair 
-    # comparision between different conditions of runs.
-    
-    # Our largest dataset is the original wiki-text data.
-    # Loading it to memory to determine the steps.
-    logger.info("Preloading largest dataset here to determine the step size.")
-    LARGEST_DATASET = "../data-files/wikitext-15M/"
-    wiki_datasets = DatasetDict.load_from_disk("../data-files/wikitext-15M/")
-    NUM_MAX_STEP = (len(wiki_datasets["train"]))/(training_args.n_gpu*training_args.per_device_train_batch_size)
-    # Overwrite.
-    training_args.max_steps = int(NUM_MAX_STEP)
-    logger.warning(f"SETTING: training_args.max_steps={training_args.max_steps}")
-    
+        
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
@@ -229,6 +205,32 @@ def main():
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
+    training_args.output_dir = os.path.join(training_args.output_dir, run_name)
+    logger.info(f"OUTPUT DIR: {training_args.output_dir}")
+        
+    if (
+        os.path.exists(training_args.output_dir)
+        and os.listdir(training_args.output_dir)
+        and training_args.do_train
+        and not training_args.overwrite_output_dir
+    ):
+        raise ValueError(
+            f"Output directory ({training_args.output_dir}) already exists and is not empty."
+            "Use --overwrite_output_dir to overcome."
+        )
+
+    # We directly infer the steps to take upfront, so it is a fair 
+    # comparision between different conditions of runs.
+    
+    # Our largest dataset is the original wiki-text data.
+    # Loading it to memory to determine the steps.
+    logger.info("Preloading largest dataset here to determine the step size.")
+    LARGEST_DATASET = "../data-files/wikitext-15M/"
+    wiki_datasets = DatasetDict.load_from_disk("../data-files/wikitext-15M/")
+    NUM_MAX_STEP = (len(wiki_datasets["train"]))/(training_args.n_gpu*training_args.per_device_train_batch_size)
+    # Overwrite.
+    training_args.max_steps = int(NUM_MAX_STEP)
+    logger.warning(f"SETTING: training_args.max_steps={training_args.max_steps}")
     
     # Log on each process the small summary:
     logger.warning(
@@ -319,9 +321,7 @@ def main():
     else:
         column_names = datasets["validation"].column_names
     text_column_name = "text" if "text" in column_names else column_names[0]
-    
-    return
-    
+
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
         padding = "max_length" if data_args.pad_to_max_length else False

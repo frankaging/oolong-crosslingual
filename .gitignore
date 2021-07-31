@@ -1,3 +1,4 @@
+code/runs/
 .huggingface_cache/
 code/wandb/
 .DS_Store
