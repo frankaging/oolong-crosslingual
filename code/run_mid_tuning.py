@@ -102,10 +102,6 @@ class ModelArguments:
             "with private models)."
         },
     )
-    perturb_type: str = field(
-        default="",
-        metadata={"help": "The specific perturbation type you want to add to this model."},
-    )
 
 @dataclass
 class DataTrainingArguments:
@@ -159,7 +155,7 @@ class DataTrainingArguments:
         },
     )
     inoculation_percentage: float = field(
-        default=1,0, metadata={"help": "Ratio of training data to include in training"}
+        default=1.0, metadata={"help": "Ratio of training data to include in training"},
     )
 
     def __post_init__(self):
@@ -211,7 +207,7 @@ def main():
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
     training_args.output_dir = os.path.join(training_args.output_dir, run_name)
     logger.info(f"OUTPUT DIR: {training_args.output_dir}")
-        
+    
     if (
         os.path.exists(training_args.output_dir)
         and os.listdir(training_args.output_dir)
@@ -235,6 +231,8 @@ def main():
     # Overwrite.
     training_args.max_steps = int(NUM_MAX_STEP)
     logger.warning(f"SETTING: training_args.max_steps={training_args.max_steps}")
+    
+    training_args.warmup_steps = int(training_args.warmup_ratio*training_args.max_steps)
     
     # Log on each process the small summary:
     logger.warning(
@@ -300,18 +298,6 @@ def main():
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     if model_args.tokenizer_name != model_args.model_name_or_path:
         model.resize_token_embeddings(len(tokenizer))
-
-    if model_args.perturb_type == "random_embedding":
-        logger.info(f"***** Perturbing the model with type: {model_args.perturb_type} *****")
-        reinit_embedding_weight = torch.empty(config.vocab_size, config.hidden_size)
-        reinit_embedding_weight = torch.nn.init.normal_(reinit_embedding_weight, mean=0.00, std=0.02)
-        model.roberta.embeddings.word_embeddings.weight.data = reinit_embedding_weight
-    elif model_args.perturb_type == "train_embedding_only":
-        logger.info(f"***** Perturbing the model with type: {model_args.perturb_type} *****")
-        logger.info("WARNING: training with only the embedding layer.")
-        for name, param in model.named_parameters():
-            if 'word_embeddings' not in name: # only word embeddings
-                param.requires_grad = False
         
     # load from pre-processed wikitext data files
     if data_args.train_file is None:
