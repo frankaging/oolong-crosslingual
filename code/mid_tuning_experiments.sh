@@ -24,3 +24,5 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python run_mid_tuning.py \
 #    ../data-files/wikitext-15M-en~fr@N~fr@V,
 #    
 # } 
+# --reverse_order
+# --random_order

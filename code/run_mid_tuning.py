@@ -155,9 +155,15 @@ class DataTrainingArguments:
         },
     )
     inoculation_percentage: float = field(
-        default=1.0, metadata={"help": "Ratio of training data to include in training"},
+        default=1.0, metadata={"help": "Ratio of training data to include in training."},
     )
-
+    reverse_order: bool = field(
+        default=False, metadata={"help": "Whether to reverse the sequence order."},
+    )
+    random_order: bool = field(
+        default=False, metadata={"help": "Whether to random order the sequence."},
+    )
+        
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
@@ -195,13 +201,15 @@ def main():
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}".format(
+    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}".format(
         date_time,
         model_args.model_name_or_path,
         model_args.tokenizer_name,
         training_args.seed,
         data_args.train_file.split("/")[-1].split(".")[0],
-        data_args.inoculation_percentage
+        data_args.inoculation_percentage,
+        data_args.reverse_order,
+        data_args.random_order,
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -312,6 +320,32 @@ def main():
         inoculation_train_df = datasets["train"].select(range(inoculation_sample_size))
         # overwrite
         datasets["train"] = inoculation_train_df
+    
+    def reverse_order(example):
+        original_text = example["text"]
+        original_text = original_text.split(" ")[::-1]
+        example["text"] = " ".join(original_text)
+        return example
+    
+    def random_order(example):
+        original_text = example["text"]
+        original_text = original_text.split(" ")
+        random.shuffle(original_text)
+        example["text"] = " ".join(original_text)
+        return example
+    
+    if data_args.reverse_order:
+        logger.warning("WARNING: you are reversing the order of your sequences.")
+        datasets["train"] = datasets["train"].map(reverse_order)
+        datasets["validation"] = datasets["validation"].map(reverse_order)
+        datasets["test"] = datasets["test"].map(reverse_order)
+
+    if data_args.random_order:
+        logger.warning("WARNING: you are random ordering your sequences.")
+        datasets["train"] = datasets["train"].map(random_order)
+        datasets["validation"] = datasets["validation"].map(random_order)
+        datasets["test"] = datasets["test"].map(random_order)
+    # we don't care about test set in this script?
     
     # Preprocessing the datasets.
     # First we tokenize all the texts.
