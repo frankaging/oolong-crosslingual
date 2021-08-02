@@ -18,11 +18,13 @@ CUDA_VISIBLE_DEVICES=0,1,2,3 python run_mid_tuning.py \
 --max_seq_length 512 \
 --warmup_ratio 0.1 \
 --inoculation_percentage 1.0
-# random seeds = {42, 62, 82}
-# train_file = {
+# --random seeds = {42, 62, 82}
+# --train_file = {
 #    ../data-files/wikitext-15M,
 #    ../data-files/wikitext-15M-en~fr@N~fr@V,
-#    
-# } 
+#    ../data-files/wikitext-15M-en~ja_ktc@N~ja_ktc@V,
+#    ../data-files/wikitext-15M-en~fr@N~ja_ktc@V,
+# }
 # --reverse_order
 # --random_order
+# --inoculation_percentage ={0.2, 0.4, 0.6, 0.8, 1.0}
