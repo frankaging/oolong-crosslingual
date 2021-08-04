@@ -4,6 +4,19 @@
 # In[ ]:
 
 
+"""
+UPDATES:
+When we read in long paragraphs which contain multiple sentences,
+we will need Stanza to chunk them into sentences. This causes some
+problems when generating conullu files where a "sentence" will be
+essentially chunked into multiple sentences, and we need to merge
+sentences back when generating the perturbed datasets.
+"""
+
+
+# In[ ]:
+
+
 # Imports
 import stanza
 from stanza.utils.conll import CoNLL
@@ -18,6 +31,7 @@ import pathlib
 import random
 import torch
 import numpy as np
+import json
 
 
 # In[ ]:
@@ -136,13 +150,22 @@ if __name__ == "__main__":
     train_output_file = os.path.join(args.output_dir, "wikitext-15M-train.conllu")
     test_output_file = os.path.join(args.output_dir, "wikitext-15M-test.conllu")
     validation_output_file = os.path.join(args.output_dir, "wikitext-15M-validation.conllu")
+    train_json_file = os.path.join(args.output_dir, "wikitext-15M-train.json")
+    test_json_file = os.path.join(args.output_dir, "wikitext-15M-test.json")
+    validation_json_file = os.path.join(args.output_dir, "wikitext-15M-validation.json")
     logging.info(train_output_file)
     logging.info(validation_output_file)
     logging.info(test_output_file)
+    logging.info(train_json_file)
+    logging.info(test_json_file)
+    logging.info(validation_json_file)
     try:
         os.remove(train_output_file)
         os.remove(test_output_file)
         os.remove(validation_output_file)
+        os.remove(train_json_file)
+        os.remove(test_json_file)
+        os.remove(validation_json_file)
     except OSError:
         pass
     
@@ -150,7 +173,10 @@ if __name__ == "__main__":
     write_mode = "a+"
     
     # Stanza
-    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos', tokenize_no_ssplit=True)
+    # We need to set tokenize_no_ssplit to False, and we need to merge at later stage
+    # so that our shifting is NOT across sentences which would not make sense for long
+    # sequences in the wiki-text data, for instance.
+    nlp = stanza.Pipeline(lang='en', processors='tokenize,pos', tokenize_no_ssplit=False)
     logging.info("Finish loading Stanza in.")
     
     def preprocess(wiki_datasets, args, split):
@@ -175,18 +201,31 @@ if __name__ == "__main__":
         
         if split == "train":
             output_file = train_output_file
+            output_json = train_json_file
         elif split == "test":
             output_file = test_output_file
+            output_json = test_json_file
         else:
             output_file = validation_output_file
+            output_json = validation_json_file
         
+        sentence_group = []
         for chunk in chunks:
             logging.info(f"processing: {count+1}/{total_chunk}.")
             in_docs = [stanza.Document([], text=d) for d in chunk]
             docs = nlp(in_docs)
             for i in range(len(docs)):
+                # count the number of sentences, and we need to save it somewhere
+                # so that we can merge them back at the end.
+                sentence_count = len(docs[i].sentences)
+                sentence_group += [sentence_count]
                 CoNLL.write_doc2conll(docs[i], output_file, mode=write_mode)
             count += 1
+        logging.info("Saving sentence slicing information into:")
+        logging.info(output_json)
+        # dump to the disk.
+        with open(output_json, "w") as fd:
+            json.dump(sentence_group, fd, indent=4)
             
     if args.include_train:
         preprocess(wiki_datasets, args, "train")

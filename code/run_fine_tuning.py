@@ -1,391 +1,585 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[3]:
 
 
-# coding=utf-8
-# Copyright 2020 The HuggingFace Team All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Fine-tuning the library models for masked language modeling (BERT, ALBERT, RoBERTa...) on a text file or a dataset.
-Here is the full list of checkpoints on the hub that can be fine-tuned by this script:
-https://huggingface.co/models?filter=masked-lm
-"""
-# You can also adapt this script on your own masked language modeling task. Pointers for this are left as comments.
+# Load modules, mainly huggingface basic model handlers.
+# Make sure you install huggingface and other packages properly.
+from collections import Counter
+import json
+
+from nltk.tokenize import TweetTokenizer
+from sklearn.metrics import classification_report
+from sklearn.feature_extraction import DictVectorizer
+from sklearn.feature_extraction.text import TfidfTransformer
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import Pipeline
+from sklearn.metrics import matthews_corrcoef
 
 import logging
-import math
+logger = logging.getLogger(__name__)
+
 import os
+os.environ["TRANSFORMERS_CACHE"] = "../huggingface_cache/" # Not overload common dir 
+                                                           # if run in shared resources.
+
+import random
 import sys
-import torch
 from dataclasses import dataclass, field
 from typing import Optional
-
-from datasets import load_dataset
+import torch
+import argparse
+import numpy as np
+import pandas as pd
+from datasets import load_dataset, load_metric
+from datasets import Dataset
 from datasets import DatasetDict
 
 import transformers
 from transformers import (
-    CONFIG_MAPPING,
-    MODEL_FOR_MASKED_LM_MAPPING,
     AutoConfig,
-    AutoModelForMaskedLM,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
-    DataCollatorForLanguageModeling,
+    EvalPrediction,
     HfArgumentParser,
+    PretrainedConfig,
     Trainer,
     TrainingArguments,
+    default_data_collator,
     set_seed,
+    EarlyStoppingCallback
 )
-from transformers.trainer_utils import is_main_process
+from transformers.trainer_utils import is_main_process, EvaluationStrategy
+from functools import partial
 
 
-logger = logging.getLogger(__name__)
-MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+# In[ ]:
 
 
-# In[2]:
-
-
-@dataclass
-class ModelArguments:
-    """
-    Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
-    """
-
-    model_name_or_path: Optional[str] = field(
-        default=None,
-        metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
-        },
-    )
-    model_type: Optional[str] = field(
-        default=None,
-        metadata={"help": "If training from scratch, pass a model type from the list: " + ", ".join(MODEL_TYPES)},
-    )
-    config_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
-    )
-    tokenizer_name: Optional[str] = field(
-        default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
-    )
-    cache_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
-    )
-    use_fast_tokenizer: bool = field(
-        default=True,
-        metadata={"help": "Whether to use one of the fast tokenizer (backed by the tokenizers library) or not."},
-    )
-    model_revision: str = field(
-        default="main",
-        metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
-    )
-    use_auth_token: bool = field(
-        default=False,
-        metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
-        },
-    )
-    perturb_type: str = field(
-        default="",
-        metadata={"help": "The specific perturbation type you want to add to this model."},
-    )
-
-@dataclass
-class DataTrainingArguments:
-    """
-    Arguments pertaining to what data we are going to input our model for training and eval.
-    """
-
-    dataset_name: Optional[str] = field(
-        default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
-    )
-    dataset_config_name: Optional[str] = field(
-        default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
-    )
-    train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
-    validation_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
-    )
-    overwrite_cache: bool = field(
-        default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
-    )
-    validation_split_percentage: Optional[int] = field(
-        default=5,
-        metadata={
-            "help": "The percentage of the train set used as validation set in case there's no validation split"
-        },
-    )
-    max_seq_length: Optional[int] = field(
-        default=None,
-        metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated."
-        },
-    )
-    preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
-    )
-    mlm_probability: float = field(
-        default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
-    )
-    line_by_line: bool = field(
-        default=False,
-        metadata={"help": "Whether distinct lines of text in the dataset are to be handled as distinct sequences."},
-    )
-    pad_to_max_length: bool = field(
-        default=False,
-        metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
-        },
-    )
-
-    def __post_init__(self):
-        if self.dataset_name is None and self.train_file is None and self.validation_file is None:
-            raise ValueError("Need either a dataset name or a training/validation file.")
-        else:
-            pass
-
-
-# In[3]:
-
-
-def main():
+def generate_training_args(args, inoculation_step):
     
-    os.environ["WANDB_PROJECT"] = "fine_tuning"
-    
-    # See all possible arguments in src/transformers/training_args.py
-    # or by passing the --help flag to this script.
-    # We now keep distinct sets of args, for a cleaner separation of concerns.
+    training_args = TrainingArguments("tmp_trainer")
+    training_args.no_cuda = args.no_cuda
+    training_args.seed = args.seed
+    training_args.do_train = args.do_train
+    training_args.do_eval = args.do_eval
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
-    
-    if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
-        # If we pass only one argument to the script and it's the path to a json file,
-        # let's parse it to get our arguments.
-        model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
-    else:
-        model_args, data_args, training_args = parser.parse_args_into_dataclasses()
-
-    if (
-        os.path.exists(training_args.output_dir)
-        and os.listdir(training_args.output_dir)
-        and training_args.do_train
-        and not training_args.overwrite_output_dir
-    ):
-        raise ValueError(
-            f"Output directory ({training_args.output_dir}) already exists and is not empty."
-            "Use --overwrite_output_dir to overcome."
-        )
+    training_args.evaluation_strategy = args.evaluation_strategy # evaluation is done after each epoch
+    training_args.metric_for_best_model = args.metric_for_best_model
+    training_args.greater_is_better = args.greater_is_better
+    training_args.logging_dir = args.logging_dir
+    training_args.task_name = args.task_name
+    training_args.learning_rate = args.learning_rate
+    training_args.per_device_train_batch_size = args.per_device_train_batch_size
+    training_args.per_device_eval_batch_size = args.per_device_eval_batch_size
+    training_args.num_train_epochs = args.num_train_epochs # this is the maximum num_train_epochs, we set this to be 100.
+    training_args.eval_steps = args.eval_steps
+    training_args.logging_steps = args.logging_steps
+    training_args.load_best_model_at_end = args.load_best_model_at_end
+    if args.save_total_limit != -1:
+        # only set if it is specified
+        training_args.save_total_limit = args.save_total_limit
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
+        
+    logger.info("Generating the run name for WANDB for better experiment tracking.")
+    import datetime
+    date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
+    run_name = "{0}_{1}_{2}_{3}_seed_{4}_data_{5}_inoculation_{6}_reverse_{7}_random_{8}".format(
+        date_time,
+        args.task_name,
+        args.model_name_or_path,
+        args.tokenizer_name,
+        args.seed,
+        args.train_file.split("/")[-1].split(".")[0],
+        args.inoculation_percentage,
+        args.reverse_order,
+        args.random_order,
+    )
+    training_args.run_name = run_name
+    logger.info(f"WANDB RUN NAME: {training_args.run_name}")
+    training_args.output_dir = os.path.join(args.output_dir, run_name)
+
+    training_args_dict = training_args.to_dict()
+    # for PR
+    _n_gpu = training_args_dict["_n_gpu"]
+    del training_args_dict["_n_gpu"]
+    training_args_dict["n_gpu"] = _n_gpu
+    HfParser = HfArgumentParser((TrainingArguments))
+    training_args = HfParser.parse_dict(training_args_dict)[0]
+
+    if args.model_name_or_path == "":
+        assert False # you have to provide one of them.
+    # Set seed before initializing model.
+    set_seed(training_args.seed)
 
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
         + f"distributed training: {bool(training_args.local_rank != -1)}, 16-bits training: {training_args.fp16}"
     )
+
     # Set the verbosity to info of the Transformers logger (on main process only):
     if is_main_process(training_args.local_rank):
         transformers.utils.logging.set_verbosity_info()
         transformers.utils.logging.enable_default_handler()
         transformers.utils.logging.enable_explicit_format()
-    logger.info("Training/evaluation parameters %s", training_args)
+    logger.info(f"Training/evaluation parameters {training_args}")
+    return training_args
 
-    logger.info("Training/evaluation parameters %s", data_args)
+
+# In[ ]:
+
+
+class HuggingFaceRoBERTaBase:
+    """
+    An extension for evaluation based off the huggingface module.
+    """
+    def __init__(self, tokenizer, model, task_name, task_config):
+        self.task_name = task_name
+        self.task_config = task_config
+        self.tokenizer = tokenizer
+        self.model = model
+        
+    def train(self, inoculation_train_df, eval_df, model_path, training_args, max_length=128,
+              inoculation_patience_count=5, pd_format=True, 
+              scramble_proportion=0.0, eval_with_scramble=False):
+
+        if pd_format:
+            datasets = {}
+            datasets["train"] = Dataset.from_pandas(inoculation_train_df)
+            datasets["validation"] = Dataset.from_pandas(eval_df)
+        else:
+            datasets = {}
+            datasets["train"] = inoculation_train_df
+            datasets["validation"] = eval_df
+        logger.info(f"***** Train Sample Count (Verify): %s *****"%(len(datasets["train"])))
+        logger.info(f"***** Valid Sample Count (Verify): %s *****"%(len(datasets["validation"])))
     
-    logger.info("Training/evaluation parameters %s", model_args)
-    
-    # Set seed before initializing model.
-    set_seed(training_args.seed)
+        label_list = datasets["validation"].unique("label")
+        label_list.sort()  # Let's sort it for determinism
 
-    # Load pretrained model and tokenizer
-    #
-    # Distributed training:
-    # The .from_pretrained methods guarantee that only one local process can concurrently
-    # download model & vocab.
-    config_kwargs = {
-        "cache_dir": model_args.cache_dir,
-        "revision": model_args.model_revision,
-        "use_auth_token": True if model_args.use_auth_token else None,
-    }
-    if model_args.config_name:
-        config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
-    elif model_args.model_name_or_path:
-        config = AutoConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
-    else:
-        config = CONFIG_MAPPING[model_args.model_type]()
-        logger.warning("You are instantiating a new config instance from scratch.")
-
-    # this is our own tokenizer
-    TOKENIZER_MAPPING = dict()
-    TOKENIZER_MAPPING["bert"] = 'bert-base-uncased'
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_args.tokenizer_name,
-        use_fast=False,
-        cache_dir=model_args.cache_dir
-    )
-
-    if model_args.model_name_or_path:
-        model = AutoModelForMaskedLM.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=bool(".ckpt" in model_args.model_name_or_path),
-            config=config,
-            cache_dir=model_args.cache_dir,
-            revision=model_args.model_revision,
-            use_auth_token=True if model_args.use_auth_token else None,
-        )
-    else:
-        logger.info("Training new model from scratch")
-        model = AutoModelForMaskedLM.from_config(config)
-
-    logger.info(f"***** Current setups *****")
-    logger.info(f"***** model type: {model_args.model_name_or_path} *****")
-    logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
+        sentence1_key, sentence2_key = self.task_config
         
-    model.resize_token_embeddings(len(tokenizer))
+        # we will scramble out input sentence here
+        # TODO: we scramble both train and eval sets
+        if self.task_name == "sst3" or self.task_name == "cola":
+            def scramble_inputs(proportion, example):
+                original_text = example[sentence1_key]
+                original_sentence = basic_tokenizer.tokenize(original_text)
+                max_length = len(original_sentence)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, len(original_sentence)-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_sentence[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
 
-    if model_args.perturb_type == "random_embedding":
-        logger.info(f"***** Perturbing the model with type: {model_args.perturb_type} *****")
-        reinit_embedding_weight = torch.empty(config.vocab_size, config.hidden_size)
-        reinit_embedding_weight = torch.nn.init.normal_(reinit_embedding_weight, mean=0.00, std=0.02)
-        model.roberta.embeddings.word_embeddings.weight.data = reinit_embedding_weight
-    elif model_args.perturb_type == "train_embedding_only":
-        logger.info(f"***** Perturbing the model with type: {model_args.perturb_type} *****")
-        logger.info("WARNING: training with only the embedding layer.")
-        for name, param in model.named_parameters():
-            if 'word_embeddings' not in name: # only word embeddings
-                param.requires_grad = False
+                out_string = " ".join(scramble_text).replace(" ##", "").strip()
+                example[sentence1_key] = out_string
+                return example
+        elif self.task_name == "snli" or             self.task_name == "mrpc" or             self.task_name == "qnli":
+            def scramble_inputs(proportion, example):
+                original_premise = example[sentence1_key]
+                original_hypothesis = example[sentence2_key]
+                if original_hypothesis == None:
+                    original_hypothesis = ""
+                try:
+                    original_premise_tokens = basic_tokenizer.tokenize(original_premise)
+                    original_hypothesis_tokens = basic_tokenizer.tokenize(original_hypothesis)
+                except:
+                    print("Please debug these sequence...")
+                    print(original_premise)
+                    print(original_hypothesis)
+
+                max_length = len(original_premise_tokens)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, max_length-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_premise_tokens[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text_premise = original_premise_tokens[:scramble_start] + scramble_sentence + original_premise_tokens[scramble_end:]
+
+                max_length = len(original_hypothesis_tokens)
+                scramble_length = int(max_length*proportion)
+                scramble_start = random.randint(0, max_length-scramble_length)
+                scramble_end = scramble_start + scramble_length
+                scramble_sentence = original_hypothesis_tokens[scramble_start:scramble_end]
+                random.shuffle(scramble_sentence)
+                scramble_text_hypothesis = original_hypothesis_tokens[:scramble_start] + scramble_sentence + original_hypothesis_tokens[scramble_end:]
+
+                out_string_premise = " ".join(scramble_text_premise).replace(" ##", "").strip()
+                out_string_hypothesis = " ".join(scramble_text_hypothesis).replace(" ##", "").strip()
+                example[sentence1_key] = out_string_premise
+                example[sentence2_key] = out_string_hypothesis
+                return example
         
-    # load from pre-processed wikitext data files
-    if data_args.train_file is None:
-        raise ValueError("This code requires a training/validation file.")
-
-    datasets = DatasetDict.load_from_disk(data_args.train_file)
-    # Preprocessing the datasets.
-    # First we tokenize all the texts.
-    if training_args.do_train:
-        column_names = datasets["train"].column_names
-    else:
-        column_names = datasets["validation"].column_names
-    text_column_name = "text" if "text" in column_names else column_names[0]
-
-    if data_args.line_by_line:
-        # When using line_by_line, we just tokenize each nonempty line.
-        padding = "max_length" if data_args.pad_to_max_length else False
-
-        print("****************************************")
-        print("*                                      *")
-        print("*  you are parsing line by line here!  *")
-        print("*                                      *")
-        print("****************************************")
+        if scramble_proportion > 0.0:
+            logger.info(f"You are scrambling the inputs to test syntactic feature importance!")
+            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion))
+            if eval_with_scramble:
+                logger.info(f"You are scrambling the evaluation data as well!")
+                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion))
         
-        def tokenize_function(examples):
-            # Remove empty lines
-            examples["text"] = [line for line in examples["text"] if len(line) > 0 and not line.isspace()]
-            return tokenizer(
-                examples["text"],
-                padding=padding,
-                truncation=True,
-                max_length=data_args.max_seq_length,
-                # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
-                # receives the `special_tokens_mask`.
-                return_special_tokens_mask=True,
+        padding = "max_length"
+        sentence1_key, sentence2_key = self.task_config
+        label_to_id = None
+        def preprocess_function(examples):
+            # Tokenize the texts
+            args = (
+                (examples[sentence1_key],) if sentence2_key is None else (examples[sentence1_key], examples[sentence2_key])
             )
+            result = self.tokenizer(*args, padding=padding, max_length=max_length, truncation=True)
+            # Map labels to IDs (not necessary for GLUE tasks)
+            if label_to_id is not None and "label" in examples:
+                result["label"] = [label_to_id[l] for l in examples["label"]]
+            return result
+        datasets["train"] = datasets["train"].map(preprocess_function, batched=True)
+        datasets["validation"] = datasets["validation"].map(preprocess_function, batched=True)
+        
+        train_dataset = datasets["train"]
+        eval_dataset = datasets["validation"]
+        
+        # Log a few random samples from the training set:
+        for index in random.sample(range(len(train_dataset)), 3):
+            logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
+            
+        metric = load_metric("glue", "sst2") # any glue task will do the job, just for eval loss
+        
+        def asenti_compute_metrics(p: EvalPrediction):
+            preds = p.predictions[0] if isinstance(p.predictions, tuple) else p.predictions
+            preds = np.argmax(preds, axis=1)
+            result_to_print = classification_report(p.label_ids, preds, digits=5, output_dict=True)
+            print(classification_report(p.label_ids, preds, digits=5))
+            mcc_scores = matthews_corrcoef(p.label_ids, preds)
+            logger.info(f"MCC scores: {mcc_scores}.")
+            result_to_return = metric.compute(predictions=preds, references=p.label_ids)
+            result_to_return["Macro-F1"] = result_to_print["macro avg"]["f1-score"]
+            result_to_return["MCC"] = mcc_scores
+            return result_to_return
 
-        tokenized_datasets = datasets.map(
-            tokenize_function,
-            batched=True,
-            num_proc=data_args.preprocessing_num_workers,
-            remove_columns=[text_column_name],
-            load_from_cache_file=not data_args.overwrite_cache,
+        # Initialize our Trainer. We are only intersted in evaluations
+        trainer = Trainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            compute_metrics=asenti_compute_metrics,
+            tokenizer=self.tokenizer,
+            # Data collator will default to DataCollatorWithPadding, so we change it if we already did the padding.
+            data_collator=default_data_collator
         )
-    else:
-        raise ValueError("I think parsing it line by line will be preferred. Please use --line_by_line.")
-
-    # Data collator
-    # This one will take care of randomly masking the tokens.
-    data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm_probability=data_args.mlm_probability)
-
-    # Initialize our Trainer
-    trainer = Trainer(
-        model=model,
-        args=training_args,
-        train_dataset=tokenized_datasets["train"] if training_args.do_train else None,
-        eval_dataset=tokenized_datasets["validation"] if training_args.do_eval else None,
-        tokenizer=tokenizer,
-        data_collator=data_collator,
-    )
-
-    # Training
-    if training_args.do_train:
-        model_path = (
-            model_args.model_name_or_path
-            if (model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path))
-            else None
-        )
-        train_result = trainer.train(model_path=model_path)
-        trainer.save_model()  # Saves the tokenizer too for easy upload
-
-        output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
-        if trainer.is_world_process_zero():
-            with open(output_train_file, "w") as writer:
-                logger.info("***** Train results *****")
-                for key, value in sorted(train_result.metrics.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
-
-            # Need to save the state, since Trainer.save_model saves only the tokenizer with the model
-            trainer.state.save_to_json(os.path.join(training_args.output_dir, "trainer_state.json"))
-
-    # Evaluation
-    results = {}
-    if training_args.do_eval:
-        logger.info("*** Evaluate ***")
-
-        eval_output = trainer.evaluate()
-
-        perplexity = math.exp(eval_output["eval_loss"])
-        results["perplexity"] = perplexity
-
-        output_eval_file = os.path.join(training_args.output_dir, "eval_results_mlm.txt")
-        if trainer.is_world_process_zero():
-            with open(output_eval_file, "w") as writer:
-                logger.info("***** Eval results *****")
-                for key, value in sorted(results.items()):
-                    logger.info(f"  {key} = {value}")
-                    writer.write(f"{key} = {value}\n")
-
-    return results
+        # Early stop
+        if inoculation_patience_count != -1:
+            trainer.add_callback(EarlyStoppingCallback(inoculation_patience_count))
+        
+        # Training
+        if training_args.do_train:
+            logger.info("*** Training our model ***")
+            trainer.train(
+                model_path=model_path
+            )
+            trainer.save_model()  # Saves the tokenizer too for easy upload
+        
+        # Evaluation
+        eval_results = {}
+        if training_args.do_eval:
+            logger.info("*** Evaluate ***")
+            tasks = [self.task_name]
+            eval_datasets = [eval_dataset]
+            for eval_dataset, task in zip(eval_datasets, tasks):
+                eval_result = trainer.evaluate(eval_dataset=eval_dataset)
+                output_eval_file = os.path.join(training_args.output_dir, f"eval_results_{task}.txt")
+                if trainer.is_world_process_zero():
+                    with open(output_eval_file, "w") as writer:
+                        logger.info(f"***** Eval results {task} *****")
+                        for key, value in eval_result.items():
+                            logger.info(f"  {key} = {value}")
+                            writer.write(f"{key} = {value}\n")
+                eval_results.update(eval_result)
 
 
 # In[ ]:
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+
+    ## Required parameters
+    parser.add_argument("--wandb_proj_name",
+                        default="",
+                        type=str)
+    parser.add_argument("--task_name",
+                        default="sst3",
+                        type=str)
+    parser.add_argument("--train_file",
+                        default="../data-files/sst-tenary/sst-tenary-train.tsv",
+                        type=str,
+                        help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
+    parser.add_argument("--eval_file",
+                        default="../data-files/sst-tenary/sst-tenary-dev.tsv",
+                        type=str,
+                        help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
+    parser.add_argument("--model_name_or_path",
+                        default="roberta-base",
+                        type=str,
+                        help="The pretrained model binary file.")
+    parser.add_argument("--tokenizer_name",
+                        default="roberta-base",
+                        type=str,
+                        help="Tokenizer name.")
+    parser.add_argument("--do_train",
+                        default=True,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
+    parser.add_argument("--do_eval",
+                        default=True,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
+    parser.add_argument("--no_cuda",
+                        default=False,
+                        action='store_true',
+                        help="Whether not to use CUDA when available")
+    parser.add_argument("--evaluation_strategy",
+                        default="steps",
+                        type=str,
+                        help="When you evaluate your training model on eval set.")
+    parser.add_argument("--cache_dir",
+                        default="../tmp/",
+                        type=str,
+                        help="Cache directory for the evaluation pipeline (not HF cache).")
+    parser.add_argument("--logging_dir",
+                        default="../tmp/",
+                        type=str,
+                        help="Logging directory.")
+    parser.add_argument("--output_dir",
+                        default="../results/",
+                        type=str,
+                        help="Output directory of this training process.")
+    parser.add_argument("--max_seq_length",
+                        default=128,
+                        type=int,
+                        help="The maximum total input sequence length after WordPiece tokenization. \n"
+                             "Sequences longer than this will be truncated, and sequences shorter \n"
+                             "than this will be padded.")
+    parser.add_argument("--learning_rate",
+                        default=2e-5,
+                        type=float,
+                        help="The initial learning rate for Adam.")
+    parser.add_argument("--seed",
+                        default=42,
+                        type=int,
+                        help="Random seed")
+    parser.add_argument("--metric_for_best_model",
+                        default="Macro-F1",
+                        type=str,
+                        help="The metric to use to compare two different models.")
+    parser.add_argument("--greater_is_better",
+                        default=True,
+                        action='store_true',
+                        help="Whether the `metric_for_best_model` should be maximized or not.")
+    parser.add_argument("--is_tensorboard",
+                        default=False,
+                        action='store_true',
+                        help="If tensorboard is connected.")
+    parser.add_argument("--load_best_model_at_end",
+                        default=False,
+                        action='store_true',
+                        help="Whether load best model and evaluate at the end.")
+    parser.add_argument("--eval_steps",
+                        default=10,
+                        type=float,
+                        help="The total steps to flush logs to wandb specifically.")
+    parser.add_argument("--logging_steps",
+                        default=10,
+                        type=float,
+                        help="The total steps to flush logs to wandb specifically.")
+    parser.add_argument("--save_total_limit",
+                        default=-1,
+                        type=int,
+                        help="If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in output dir.")
+    # these are arguments for inoculations
+    parser.add_argument("--inoculation_patience_count",
+                        default=5,
+                        type=int,
+                        help="If the evaluation metrics is not increasing with maximum this step number, the training will be stopped.")
+    parser.add_argument("--inoculation_percentage",
+                        default=0.05,
+                        type=float,
+                        help="For each step, how many more adverserial samples you want to add in.")
+    parser.add_argument("--per_device_train_batch_size",
+                        default=8,
+                        type=int,
+                        help="")
+    parser.add_argument("--per_device_eval_batch_size",
+                        default=8,
+                        type=int,
+                        help="")
+    parser.add_argument("--eval_sample_limit",
+                        default=-1,
+                        type=int,
+                        help="")
+    parser.add_argument("--num_train_epochs",
+                        default=3.0,
+                        type=float,
+                        help="The total number of epochs for training.")
+    parser.add_argument("--no_pretrain",
+                        default=False,
+                        action='store_true',
+                        help="Whether to use pretrained model if provided.")
+    parser.add_argument("--train_embeddings_only",
+                        default=False,
+                        action='store_true',
+                        help="If only train embeddings not the whole model.")
+    parser.add_argument("--train_linear_layer_only",
+                        default=False,
+                        action='store_true',
+                        help="If only train embeddings not the whole model.")
+    # these are arguments for scrambling texts
+    parser.add_argument("--reverse_order",
+                        default=False,
+                        action='store_true',
+                        help="Whether to reverse the sequence order.")
+    parser.add_argument("--random_order",
+                        default=False,
+                        action='store_true',
+                        help="Whether to random order the sequence.")
+    parser.add_argument("--scramble_proportion",
+                        default=0.0,
+                        type=float,
+                        help="What is the percentage of text you want to scramble.")
+    parser.add_argument("--eval_with_scramble",
+                        default=False,
+                        action='store_true',
+                        help="If you are also evaluating with scrambled texts.")
+    parser.add_argument("--n_layer_to_finetune",
+                        default=-1,
+                        type=int,
+                        help="Indicate a number that is less than original layer if you only want to finetune with earlier layers only.")
+    try:
+        get_ipython().run_line_magic('matplotlib', 'inline')
+        args = parser.parse_args([])
+    except:
+        args = parser.parse_args()
+    # os.environ["WANDB_DISABLED"] = "NO" if args.is_tensorboard else "YES" # BUG
+    os.environ["TRANSFORMERS_CACHE"] = "../huggingface_inoculation_cache/"
+    os.environ["WANDB_PROJECT"] = f"fine_tuning"
+    
+    # if cache does not exist, create one
+    if not os.path.exists(os.environ["TRANSFORMERS_CACHE"]): 
+        os.makedirs(os.environ["TRANSFORMERS_CACHE"])
+    TASK_CONFIG = {
+        "sst3": ("text", None),
+        "cola": ("sentence", None),
+        "mnli": ("premise", "hypothesis"),
+        "snli": ("premise", "hypothesis"),
+        "mrpc": ("sentence1", "sentence2"),
+        "qnli": ("question", "sentence")
+    }
+    # Load pretrained model and tokenizer
+    NUM_LABELS = 2 if args.task_name == "cola" or args.task_name == "mrpc" or args.task_name == "qnli" else 3
+    MAX_SEQ_LEN = args.max_seq_length
+    training_args = generate_training_args(args, inoculation_step=0)
+    
+    FAIL()
+    
+    config = AutoConfig.from_pretrained(
+        args.model_name_or_path,
+        num_labels=NUM_LABELS,
+        finetuning_task=args.task_name,
+        cache_dir=args.cache_dir
+    )
+    if args.n_layer_to_finetune != -1:
+        # then we are only finetuning n-th layer, not all the layers
+        if args.n_layer_to_finetune > config.num_hidden_layers:
+            logger.info(f"***** WARNING: You are trying to train with first {args.n_layer_to_finetune} layers only *****")
+            logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
+            logger.info(f"***** WARNING: Training with all layers instead! *****")
+            pass # just to let it happen, just train it with all layers
+        else:
+            # overwrite
+            logger.info(f"***** WARNING: You are trying to train with first {args.n_layer_to_finetune} layers only *****")
+            logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
+            config.num_hidden_layers = args.n_layer_to_finetune
+    
+    tokenizer = AutoTokenizer.from_pretrained(
+        args.model_name_or_path,
+        use_fast=False,
+        cache_dir=args.cache_dir
+    )
+    if args.no_pretrain:
+        logger.info("***** Training new model from scratch *****")
+        model = AutoModelForSequenceClassification.from_config(config)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(
+            args.model_path,
+            from_tf=False,
+            config=config,
+            cache_dir=args.cache_dir
+        )
+        
+    if args.train_embeddings_only:
+        logger.info("***** We only train embeddings, not other layers *****")
+        for name, param in model.named_parameters():
+            if 'word_embeddings' not in name: # only word embeddings
+                param.requires_grad = False
+    
+    if args.train_linear_layer_only:
+        logger.info("***** We only train classifier head, not other layers *****")
+        for name, param in model.named_parameters():
+            if 'classifier' not in name: # only word embeddings
+                param.requires_grad = False
+        
+    train_pipeline = HuggingFaceRoBERTaBase(tokenizer, 
+                                            model, args.task_name, 
+                                            TASK_CONFIG[args.task_name])
+    logger.info(f"***** TASK NAME: {args.task_name} *****")
+    # we use panda loader now, to make sure it is backward compatible
+    # with our file writer.
+    pd_format = True
+    if args.train_file.split(".")[-1] != "tsv":
+        if len(args.train_file.split(".")) > 1:
+            logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
+            pd_format = False
+            datasets = DatasetDict.load_from_disk(args.train_file)
+            inoculation_percentage = int(len(datasets["train"]) * args.inoculation_percentage)
+            logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
+            # this may not always start for zero inoculation
+            training_args = generate_training_args(args, inoculation_step=inoculation_percentage)
+            datasets["train"] = datasets["train"].shuffle(seed=args.seed)
+            inoculation_train_df = datasets["train"].select(range(inoculation_percentage))
+            eval_df = datasets["validation"]
+            datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
+            if args.eval_sample_limit != -1:
+                datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
+        else:
+            logger.info(f"***** Loading downloaded huggingface datasets: {args.train_file}! *****")
+            pd_format = False
+            if args.train_file in ["sst3", "cola", "mnli", "snli", "mrps", "qnli"]:
+                pass
+            raise NotImplementedError()
+    else:
+        train_df = pd.read_csv(args.train_file, delimiter="\t")
+        eval_df = pd.read_csv(args.eval_file, delimiter="\t")
+        inoculation_percentage = int(len(train_df) * args.inoculation_percentage)
+        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
+        # this may not always start for zero inoculation
+        training_args = generate_training_args(args, inoculation_step=inoculation_percentage)
+        inoculation_train_df = train_df.sample(n=inoculation_percentage, 
+                                               replace=False, 
+                                               random_state=args.seed) # seed here could not a little annoying.
+
+
+    train_pipeline.train(inoculation_train_df, eval_df, 
+                         args.model_path,
+                         training_args, max_length=args.max_seq_length,
+                         inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
+                         scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
 
