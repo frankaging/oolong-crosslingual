@@ -1,3 +1,4 @@
+tmp/
 *_*_*_*/
 code/runs/
 .huggingface_cache/

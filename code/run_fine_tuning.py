@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[3]:
+# In[10]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -58,7 +58,7 @@ from functools import partial
 # In[ ]:
 
 
-def generate_training_args(args, inoculation_step):
+def generate_training_args(args):
     
     training_args = TrainingArguments("tmp_trainer")
     training_args.no_cuda = args.no_cuda
@@ -88,20 +88,24 @@ def generate_training_args(args, inoculation_step):
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO if is_main_process(training_args.local_rank) else logging.WARN,
     )
+    
+    logger.info(f"Recieved raw args: {args}")
+    
+    # validation of inputs.
+    if "/" not in args.model_name_or_path:
+        logger.warning("ERR: you have to use your saved model from mid-tuning, not brand-new models.")
+        assert False
+    if "/" not in args.tokenizer_name:
+        logger.warning("ERR: you have to use your saved tokenizer from mid-tuning, not brand-new tokenizers.")
+        assert False 
         
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_{3}_seed_{4}_data_{5}_inoculation_{6}_reverse_{7}_random_{8}".format(
+    run_name = "{0}_task_{1}_midtune_{2}".format(
         date_time,
         args.task_name,
         args.model_name_or_path,
-        args.tokenizer_name,
-        args.seed,
-        args.train_file.split("/")[-1].split(".")[0],
-        args.inoculation_percentage,
-        args.reverse_order,
-        args.random_order,
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -148,7 +152,7 @@ class HuggingFaceRoBERTaBase:
         self.tokenizer = tokenizer
         self.model = model
         
-    def train(self, inoculation_train_df, eval_df, model_path, training_args, max_length=128,
+    def train(self, inoculation_train_df, eval_df, model, training_args, max_length=128,
               inoculation_patience_count=5, pd_format=True, 
               scramble_proportion=0.0, eval_with_scramble=False):
 
@@ -284,7 +288,7 @@ class HuggingFaceRoBERTaBase:
         if training_args.do_train:
             logger.info("*** Training our model ***")
             trainer.train(
-                model_path=model_path
+                model=model,
             )
             trainer.save_model()  # Saves the tokenizer too for easy upload
         
@@ -320,7 +324,7 @@ if __name__ == "__main__":
                         default="sst3",
                         type=str)
     parser.add_argument("--train_file",
-                        default="../data-files/sst-tenary/sst-tenary-train.tsv",
+                        default="../data-files/sst/sst-tenary-train.tsv",
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--eval_file",
@@ -328,11 +332,11 @@ if __name__ == "__main__":
                         type=str,
                         help="The input data dir. Should contain the .tsv files (or other data files) for the task.")
     parser.add_argument("--model_name_or_path",
-                        default="roberta-base",
+                        default="../7-31_roberta-base_roberta-base_seed_42_data_wikitext-15M_inoculation_1.0/",
                         type=str,
                         help="The pretrained model binary file.")
     parser.add_argument("--tokenizer_name",
-                        default="roberta-base",
+                        default="../7-31_roberta-base_roberta-base_seed_42_data_wikitext-15M_inoculation_1.0/",
                         type=str,
                         help="Tokenizer name.")
     parser.add_argument("--do_train",
@@ -390,7 +394,7 @@ if __name__ == "__main__":
                         action='store_true',
                         help="If tensorboard is connected.")
     parser.add_argument("--load_best_model_at_end",
-                        default=False,
+                        default=True,
                         action='store_true',
                         help="Whether load best model and evaluate at the end.")
     parser.add_argument("--eval_steps",
@@ -402,7 +406,7 @@ if __name__ == "__main__":
                         type=float,
                         help="The total steps to flush logs to wandb specifically.")
     parser.add_argument("--save_total_limit",
-                        default=-1,
+                        default=3,
                         type=int,
                         help="If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in output dir.")
     # these are arguments for inoculations
@@ -411,15 +415,15 @@ if __name__ == "__main__":
                         type=int,
                         help="If the evaluation metrics is not increasing with maximum this step number, the training will be stopped.")
     parser.add_argument("--inoculation_percentage",
-                        default=0.05,
+                        default=1.0,
                         type=float,
                         help="For each step, how many more adverserial samples you want to add in.")
     parser.add_argument("--per_device_train_batch_size",
-                        default=8,
+                        default=64,
                         type=int,
                         help="")
     parser.add_argument("--per_device_eval_batch_size",
-                        default=8,
+                        default=64,
                         type=int,
                         help="")
     parser.add_argument("--eval_sample_limit",
@@ -486,10 +490,26 @@ if __name__ == "__main__":
     # Load pretrained model and tokenizer
     NUM_LABELS = 2 if args.task_name == "cola" or args.task_name == "mrpc" or args.task_name == "qnli" else 3
     MAX_SEQ_LEN = args.max_seq_length
-    training_args = generate_training_args(args, inoculation_step=0)
     
-    FAIL()
+    args.tokenizer_name = args.model_name_or_path
+    name_list = args.model_name_or_path.split("_")
+    for i in range(len(name_list)):
+        if name_list[i] == "seed":
+            args.seed = int(name_list[i+1])
+        if name_list[i] == "reverse":
+            if name_list[i+1] == "True":
+                args.reverse_order = True
+            else:
+                args.reverse_order = False
+        if name_list[i] == "random":
+            if name_list[i+1].strip("/") == "True":
+                args.random_order = True
+            else:
+                args.random_order = False
+    args.task_name = args.train_file.split("/")[-1].strip("/")
     
+    training_args = generate_training_args(args)
+        
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
         num_labels=NUM_LABELS,
@@ -510,20 +530,29 @@ if __name__ == "__main__":
             config.num_hidden_layers = args.n_layer_to_finetune
     
     tokenizer = AutoTokenizer.from_pretrained(
-        args.model_name_or_path,
+        args.tokenizer_name,
         use_fast=False,
         cache_dir=args.cache_dir
     )
+    
     if args.no_pretrain:
         logger.info("***** Training new model from scratch *****")
         model = AutoModelForSequenceClassification.from_config(config)
     else:
         model = AutoModelForSequenceClassification.from_pretrained(
-            args.model_path,
+            args.model_name_or_path,
             from_tf=False,
             config=config,
             cache_dir=args.cache_dir
         )
+        
+    logger.info(f"***** Current setups *****")
+    logger.info(f"***** model type: {args.model_name_or_path} *****")
+    logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
+    
+    # We cannot resize this. In the mid-tuning, this is already resized.
+    # if args.tokenizer_name != args.model_name_or_path:
+    #     model.resize_token_embeddings(len(tokenizer))
         
     if args.train_embeddings_only:
         logger.info("***** We only train embeddings, not other layers *****")
@@ -541,44 +570,51 @@ if __name__ == "__main__":
                                             model, args.task_name, 
                                             TASK_CONFIG[args.task_name])
     logger.info(f"***** TASK NAME: {args.task_name} *****")
+    
     # we use panda loader now, to make sure it is backward compatible
     # with our file writer.
-    pd_format = True
-    if args.train_file.split(".")[-1] != "tsv":
-        if len(args.train_file.split(".")) > 1:
-            logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
-            pd_format = False
-            datasets = DatasetDict.load_from_disk(args.train_file)
-            inoculation_percentage = int(len(datasets["train"]) * args.inoculation_percentage)
-            logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
-            # this may not always start for zero inoculation
-            training_args = generate_training_args(args, inoculation_step=inoculation_percentage)
-            datasets["train"] = datasets["train"].shuffle(seed=args.seed)
-            inoculation_train_df = datasets["train"].select(range(inoculation_percentage))
-            eval_df = datasets["validation"]
-            datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
-            if args.eval_sample_limit != -1:
-                datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
-        else:
-            logger.info(f"***** Loading downloaded huggingface datasets: {args.train_file}! *****")
-            pd_format = False
-            if args.train_file in ["sst3", "cola", "mnli", "snli", "mrps", "qnli"]:
-                pass
-            raise NotImplementedError()
-    else:
-        train_df = pd.read_csv(args.train_file, delimiter="\t")
-        eval_df = pd.read_csv(args.eval_file, delimiter="\t")
-        inoculation_percentage = int(len(train_df) * args.inoculation_percentage)
-        logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
-        # this may not always start for zero inoculation
-        training_args = generate_training_args(args, inoculation_step=inoculation_percentage)
-        inoculation_train_df = train_df.sample(n=inoculation_percentage, 
-                                               replace=False, 
-                                               random_state=args.seed) # seed here could not a little annoying.
+    pd_format = False
+    logger.info(f"***** Loading pre-loaded datasets from the disk directly! *****")
+    datasets = DatasetDict.load_from_disk(args.train_file)
 
+    def reverse_order(example):
+        original_text = example["text"]
+        original_text = original_text.split(" ")[::-1]
+        example["text"] = " ".join(original_text)
+        return example
+
+    def random_order(example):
+        original_text = example["text"]
+        original_text = original_text.split(" ")
+        random.shuffle(original_text)
+        example["text"] = " ".join(original_text)
+        return example
+
+    if args.reverse_order:
+        logger.warning("WARNING: you are reversing the order of your sequences.")
+        datasets["train"] = datasets["train"].map(reverse_order)
+        datasets["validation"] = datasets["validation"].map(reverse_order)
+        datasets["test"] = datasets["test"].map(reverse_order)
+
+    if args.random_order:
+        logger.warning("WARNING: you are random ordering your sequences.")
+        datasets["train"] = datasets["train"].map(random_order)
+        datasets["validation"] = datasets["validation"].map(random_order)
+        datasets["test"] = datasets["test"].map(random_order)
+    # we don't care about test set in this script?
+
+    inoculation_percentage = int(len(datasets["train"]) * args.inoculation_percentage)
+    logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
+    # this may not always start for zero inoculation
+    datasets["train"] = datasets["train"].shuffle(seed=args.seed)
+    inoculation_train_df = datasets["train"].select(range(inoculation_percentage))
+    eval_df = datasets["validation"]
+    datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
+    if args.eval_sample_limit != -1:
+        datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
 
     train_pipeline.train(inoculation_train_df, eval_df, 
-                         args.model_path,
+                         model,
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
