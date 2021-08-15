@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[10]:
+# In[28]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -58,7 +58,7 @@ from functools import partial
 # In[ ]:
 
 
-def generate_training_args(args):
+def generate_training_args(args, perturbed_type):
     
     training_args = TrainingArguments("tmp_trainer")
     training_args.no_cuda = args.no_cuda
@@ -102,10 +102,10 @@ def generate_training_args(args):
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_task_{1}_midtune_{2}".format(
+    run_name = "{0}_task_{1}_finetune_{2}".format(
         date_time,
         args.task_name,
-        args.model_name_or_path,
+        "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -152,7 +152,7 @@ class HuggingFaceRoBERTaBase:
         self.tokenizer = tokenizer
         self.model = model
         
-    def train(self, inoculation_train_df, eval_df, model, training_args, max_length=128,
+    def train(self, inoculation_train_df, eval_df, model, args, training_args, max_length=128,
               inoculation_patience_count=5, pd_format=True, 
               scramble_proportion=0.0, eval_with_scramble=False):
 
@@ -171,69 +171,7 @@ class HuggingFaceRoBERTaBase:
         label_list.sort()  # Let's sort it for determinism
 
         sentence1_key, sentence2_key = self.task_config
-        
-        # we will scramble out input sentence here
-        # TODO: we scramble both train and eval sets
-        if self.task_name == "sst3" or self.task_name == "cola":
-            def scramble_inputs(proportion, example):
-                original_text = example[sentence1_key]
-                original_sentence = basic_tokenizer.tokenize(original_text)
-                max_length = len(original_sentence)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, len(original_sentence)-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_sentence[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text = original_sentence[:scramble_start] + scramble_sentence + original_sentence[scramble_end:]
-
-                out_string = " ".join(scramble_text).replace(" ##", "").strip()
-                example[sentence1_key] = out_string
-                return example
-        elif self.task_name == "snli" or             self.task_name == "mrpc" or             self.task_name == "qnli":
-            def scramble_inputs(proportion, example):
-                original_premise = example[sentence1_key]
-                original_hypothesis = example[sentence2_key]
-                if original_hypothesis == None:
-                    original_hypothesis = ""
-                try:
-                    original_premise_tokens = basic_tokenizer.tokenize(original_premise)
-                    original_hypothesis_tokens = basic_tokenizer.tokenize(original_hypothesis)
-                except:
-                    print("Please debug these sequence...")
-                    print(original_premise)
-                    print(original_hypothesis)
-
-                max_length = len(original_premise_tokens)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, max_length-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_premise_tokens[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text_premise = original_premise_tokens[:scramble_start] + scramble_sentence + original_premise_tokens[scramble_end:]
-
-                max_length = len(original_hypothesis_tokens)
-                scramble_length = int(max_length*proportion)
-                scramble_start = random.randint(0, max_length-scramble_length)
-                scramble_end = scramble_start + scramble_length
-                scramble_sentence = original_hypothesis_tokens[scramble_start:scramble_end]
-                random.shuffle(scramble_sentence)
-                scramble_text_hypothesis = original_hypothesis_tokens[:scramble_start] + scramble_sentence + original_hypothesis_tokens[scramble_end:]
-
-                out_string_premise = " ".join(scramble_text_premise).replace(" ##", "").strip()
-                out_string_hypothesis = " ".join(scramble_text_hypothesis).replace(" ##", "").strip()
-                example[sentence1_key] = out_string_premise
-                example[sentence2_key] = out_string_hypothesis
-                return example
-        
-        if scramble_proportion > 0.0:
-            logger.info(f"You are scrambling the inputs to test syntactic feature importance!")
-            datasets["train"] = datasets["train"].map(partial(scramble_inputs, scramble_proportion))
-            if eval_with_scramble:
-                logger.info(f"You are scrambling the evaluation data as well!")
-                datasets["validation"] = datasets["validation"].map(partial(scramble_inputs, scramble_proportion))
-        
         padding = "max_length"
-        sentence1_key, sentence2_key = self.task_config
         label_to_id = None
         def preprocess_function(examples):
             # Tokenize the texts
@@ -287,9 +225,7 @@ class HuggingFaceRoBERTaBase:
         # Training
         if training_args.do_train:
             logger.info("*** Training our model ***")
-            trainer.train(
-                model=model,
-            )
+            trainer.train()
             trainer.save_model()  # Saves the tokenizer too for easy upload
         
         # Evaluation
@@ -364,7 +300,7 @@ if __name__ == "__main__":
                         type=str,
                         help="Logging directory.")
     parser.add_argument("--output_dir",
-                        default="../results/",
+                        default="../",
                         type=str,
                         help="Output directory of this training process.")
     parser.add_argument("--max_seq_length",
@@ -493,6 +429,9 @@ if __name__ == "__main__":
     
     args.tokenizer_name = args.model_name_or_path
     name_list = args.model_name_or_path.split("_")
+    
+    perturbed_type = ""
+    
     for i in range(len(name_list)):
         if name_list[i] == "seed":
             args.seed = int(name_list[i+1])
@@ -506,9 +445,16 @@ if __name__ == "__main__":
                 args.random_order = True
             else:
                 args.random_order = False
-    args.task_name = args.train_file.split("/")[-1].strip("/")
+        if name_list[i] == "data":
+            if len(name_list[i+1].split("-")) > 2:
+                perturbed_type = "-".join(name_list[i+1].split("-")[2:])
     
-    training_args = generate_training_args(args)
+    if perturbed_type == "":
+        args.train_file = f"../data-files/{args.task_name}"
+    else:
+        args.train_file = f"../data-files/{args.task_name}-{perturbed_type}"
+    
+    training_args = generate_training_args(args, perturbed_type)
         
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
@@ -614,7 +560,7 @@ if __name__ == "__main__":
         datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
 
     train_pipeline.train(inoculation_train_df, eval_df, 
-                         model,
+                         model, args,
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
