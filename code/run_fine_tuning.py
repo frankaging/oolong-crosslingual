@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[28]:
+# In[38]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -153,7 +153,7 @@ class HuggingFaceRoBERTaBase:
         self.model = model
         
     def train(self, inoculation_train_df, eval_df, model, args, training_args, max_length=128,
-              inoculation_patience_count=5, pd_format=True, 
+              inoculation_patience_count=-1, pd_format=True, 
               scramble_proportion=0.0, eval_with_scramble=False):
 
         if pd_format:
@@ -347,23 +347,15 @@ if __name__ == "__main__":
                         help="If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in output dir.")
     # these are arguments for inoculations
     parser.add_argument("--inoculation_patience_count",
-                        default=5,
+                        default=-1,
                         type=int,
                         help="If the evaluation metrics is not increasing with maximum this step number, the training will be stopped.")
-    parser.add_argument("--inoculation_percentage",
-                        default=1.0,
-                        type=float,
-                        help="For each step, how many more adverserial samples you want to add in.")
     parser.add_argument("--per_device_train_batch_size",
                         default=64,
                         type=int,
                         help="")
     parser.add_argument("--per_device_eval_batch_size",
                         default=64,
-                        type=int,
-                        help="")
-    parser.add_argument("--eval_sample_limit",
-                        default=-1,
                         type=int,
                         help="")
     parser.add_argument("--num_train_epochs",
@@ -403,11 +395,8 @@ if __name__ == "__main__":
                         default=-1,
                         type=int,
                         help="Indicate a number that is less than original layer if you only want to finetune with earlier layers only.")
-    try:
-        get_ipython().run_line_magic('matplotlib', 'inline')
-        args = parser.parse_args([])
-    except:
-        args = parser.parse_args()
+
+    args, unknown = parser.parse_known_args()
     # os.environ["WANDB_DISABLED"] = "NO" if args.is_tensorboard else "YES" # BUG
     os.environ["TRANSFORMERS_CACHE"] = "../huggingface_inoculation_cache/"
     os.environ["WANDB_PROJECT"] = f"fine_tuning"
@@ -448,13 +437,20 @@ if __name__ == "__main__":
         if name_list[i] == "data":
             if len(name_list[i+1].split("-")) > 2:
                 perturbed_type = "-".join(name_list[i+1].split("-")[2:])
-    
+        if name_list[i] == "inoculation":
+            inoculation_p = float(name_list[i+1])
+
     if perturbed_type == "":
         args.train_file = f"../data-files/{args.task_name}"
     else:
         args.train_file = f"../data-files/{args.task_name}-{perturbed_type}"
     
     training_args = generate_training_args(args, perturbed_type)
+    
+    if inoculation_p == 0.0:
+        logger.warning(f"***** WARNING: Detected inoculation_p={inoculation_p}; initialize the model and the tokenizer from huggingface. *****")
+        args.model_name_or_path = "roberta-base"
+        args.tokenizer_name = "roberta-base"
         
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
@@ -462,6 +458,7 @@ if __name__ == "__main__":
         finetuning_task=args.task_name,
         cache_dir=args.cache_dir
     )
+
     if args.n_layer_to_finetune != -1:
         # then we are only finetuning n-th layer, not all the layers
         if args.n_layer_to_finetune > config.num_hidden_layers:
@@ -495,7 +492,7 @@ if __name__ == "__main__":
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
-    
+
     # We cannot resize this. In the mid-tuning, this is already resized.
     # if args.tokenizer_name != args.model_name_or_path:
     #     model.resize_token_embeddings(len(tokenizer))
@@ -549,15 +546,11 @@ if __name__ == "__main__":
         datasets["test"] = datasets["test"].map(random_order)
     # we don't care about test set in this script?
 
-    inoculation_percentage = int(len(datasets["train"]) * args.inoculation_percentage)
-    logger.info(f"***** Inoculation Sample Count: %s *****"%(inoculation_percentage))
     # this may not always start for zero inoculation
     datasets["train"] = datasets["train"].shuffle(seed=args.seed)
-    inoculation_train_df = datasets["train"].select(range(inoculation_percentage))
+    inoculation_train_df = datasets["train"]
     eval_df = datasets["validation"]
-    datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
-    if args.eval_sample_limit != -1:
-        datasets["validation"] = datasets["validation"].select(range(args.eval_sample_limit))
+    # datasets["validation"] = datasets["validation"].shuffle(seed=args.seed)
 
     train_pipeline.train(inoculation_train_df, eval_df, 
                          model, args,
