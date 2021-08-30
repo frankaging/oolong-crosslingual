@@ -93,20 +93,33 @@ def generate_training_args(args, perturbed_type):
     
     # validation of inputs.
     if "/" not in args.model_name_or_path:
-        logger.warning("ERR: you have to use your saved model from mid-tuning, not brand-new models.")
-        assert False
+        logger.warning("WARNING: you have to use your saved model from mid-tuning, not brand-new models.")
     if "/" not in args.tokenizer_name:
-        logger.warning("ERR: you have to use your saved tokenizer from mid-tuning, not brand-new tokenizers.")
-        assert False 
+        logger.warning("WARNING: you have to use your saved tokenizer from mid-tuning, not brand-new tokenizers.")
         
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_task_{1}_finetune_{2}".format(
-        date_time,
-        args.task_name,
-        "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
-    )
+    
+    if len(args.model_name_or_path.split("/")) > 1:
+        run_name = "{0}_task_{1}_finetune_{2}".format(
+            date_time,
+            args.task_name,
+            "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
+        )
+    else:
+        if args.no_pretrain:
+            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain".format(
+                date_time,
+                args.task_name,
+                args.model_name_or_path,
+            )
+        else:
+            run_name = "{0}_task_{1}_finetune_{2}".format(
+                date_time,
+                args.task_name,
+                args.model_name_or_path,
+            )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
     training_args.output_dir = os.path.join(args.output_dir, run_name)
@@ -342,7 +355,7 @@ if __name__ == "__main__":
                         type=float,
                         help="The total steps to flush logs to wandb specifically.")
     parser.add_argument("--save_total_limit",
-                        default=3,
+                        default=1,
                         type=int,
                         help="If a value is passed, will limit the total amount of checkpoints. Deletes the older checkpoints in output dir.")
     # these are arguments for inoculations
@@ -387,6 +400,10 @@ if __name__ == "__main__":
                         default=0.0,
                         type=float,
                         help="What is the percentage of text you want to scramble.")
+    parser.add_argument("--inoculation_p",
+                        default=1.0,
+                        type=float,
+                        help="How many data you need to train")
     parser.add_argument("--eval_with_scramble",
                         default=False,
                         action='store_true',
@@ -421,25 +438,28 @@ if __name__ == "__main__":
     
     perturbed_type = ""
     
-    for i in range(len(name_list)):
-        if name_list[i] == "seed":
-            args.seed = int(name_list[i+1])
-        if name_list[i] == "reverse":
-            if name_list[i+1] == "True":
-                args.reverse_order = True
-            else:
-                args.reverse_order = False
-        if name_list[i] == "random":
-            if name_list[i+1].strip("/") == "True":
-                args.random_order = True
-            else:
-                args.random_order = False
-        if name_list[i] == "data":
-            if len(name_list[i+1].split("-")) > 2:
-                perturbed_type = "-".join(name_list[i+1].split("-")[2:])
-        if name_list[i] == "inoculation":
-            inoculation_p = float(name_list[i+1])
-
+    if not args.no_pretrain:
+        for i in range(len(name_list)):
+            if name_list[i] == "seed":
+                args.seed = int(name_list[i+1])
+            if name_list[i] == "reverse":
+                if name_list[i+1] == "True":
+                    args.reverse_order = True
+                else:
+                    args.reverse_order = False
+            if name_list[i] == "random":
+                if name_list[i+1].strip("/") == "True":
+                    args.random_order = True
+                else:
+                    args.random_order = False
+            if name_list[i] == "data":
+                if len(name_list[i+1].split("-")) > 2:
+                    perturbed_type = "-".join(name_list[i+1].split("-")[2:])
+            if name_list[i] == "inoculation":
+                inoculation_p = float(name_list[i+1])
+    else:
+        inoculation_p = 0.0
+        
     if perturbed_type == "":
         args.train_file = f"../data-files/{args.task_name}"
     else:
@@ -492,7 +512,7 @@ if __name__ == "__main__":
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
-
+    
     # We cannot resize this. In the mid-tuning, this is already resized.
     # if args.tokenizer_name != args.model_name_or_path:
     #     model.resize_token_embeddings(len(tokenizer))
@@ -521,16 +541,22 @@ if __name__ == "__main__":
     datasets = DatasetDict.load_from_disk(args.train_file)
 
     def reverse_order(example):
-        original_text = example["text"]
-        original_text = original_text.split(" ")[::-1]
-        example["text"] = " ".join(original_text)
+        fields = TASK_CONFIG[args.task_name]
+        for field in fields:
+            if field:
+                original_text = example[field]
+                original_text = original_text.split(" ")[::-1]
+                example[field] = " ".join(original_text)
         return example
 
     def random_order(example):
-        original_text = example["text"]
-        original_text = original_text.split(" ")
-        random.shuffle(original_text)
-        example["text"] = " ".join(original_text)
+        fields = TASK_CONFIG[args.task_name]
+        for field in fields:
+            if field:
+                original_text = example[field]
+                original_text = original_text.split(" ")
+                random.shuffle(original_text)
+                example[field] = " ".join(original_text)
         return example
 
     if args.reverse_order:

@@ -14,7 +14,7 @@ sentences back when generating the perturbed datasets.
 """
 
 
-# In[6]:
+# In[9]:
 
 
 # Imports
@@ -33,25 +33,14 @@ import torch
 import numpy as np
 import json
 import copy
+import pandas as pd
 
 text_fields_map = {
     "wikitext-15M":"text",
     "sst3":"text",
-    "snli":"premise,hypothesis",
+    "qnli":"question,sentence",
     "mrpc":"sentence1,sentence2",
 }
-
-
-# In[23]:
-
-
-datasets = DatasetDict.load_from_disk("../../data-files/snli/")
-
-
-# In[26]:
-
-
-datasets["test"][0]
 
 
 # In[ ]:
