@@ -405,12 +405,7 @@ def main():
 
     # Training
     if training_args.do_train:
-        model_path = (
-            model_args.model_name_or_path
-            if (model_args.model_name_or_path is not None and os.path.isdir(model_args.model_name_or_path))
-            else None
-        )
-        train_result = trainer.train(model_path=model_path)
+        train_result = trainer.train()
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         output_train_file = os.path.join(training_args.output_dir, "train_results.txt")
@@ -450,4 +445,40 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# In[2]:
+
+
+config = AutoConfig.from_pretrained(
+    "roberta-base",
+)
+
+
+# In[3]:
+
+
+model = AutoModelForMaskedLM.from_pretrained(
+    "roberta-base",
+    config=config,
+    cache_dir="../.huggingface_cache/",
+)
+
+
+# In[4]:
+
+
+model.resize_token_embeddings(30000)
+
+
+# In[5]:
+
+
+model
+
+
+# In[ ]:
+
+
+
 
