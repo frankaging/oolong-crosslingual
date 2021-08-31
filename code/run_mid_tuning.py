@@ -446,39 +446,3 @@ def main():
 if __name__ == "__main__":
     main()
 
-
-# In[2]:
-
-
-config = AutoConfig.from_pretrained(
-    "roberta-base",
-)
-
-
-# In[3]:
-
-
-model = AutoModelForMaskedLM.from_pretrained(
-    "roberta-base",
-    config=config,
-    cache_dir="../.huggingface_cache/",
-)
-
-
-# In[4]:
-
-
-model.resize_token_embeddings(30000)
-
-
-# In[5]:
-
-
-model
-
-
-# In[ ]:
-
-
-
-
