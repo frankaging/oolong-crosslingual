@@ -109,10 +109,11 @@ def generate_training_args(args, perturbed_type):
         )
     else:
         if args.no_pretrain:
-            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain".format(
+            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_avg_{3}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
+                args.reinit_avg_embeddings,
             )
         else:
             run_name = "{0}_task_{1}_finetune_{2}".format(
@@ -463,7 +464,7 @@ if __name__ == "__main__":
                 inoculation_p = float(name_list[i+1])
     else:
         inoculation_p = 0.0
-        
+    
     if perturbed_type == "":
         args.train_file = f"../data-files/{args.task_name}"
     else:
@@ -496,6 +497,12 @@ if __name__ == "__main__":
             logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
             config.num_hidden_layers = args.n_layer_to_finetune
     
+    # we need to make sure tokenizer is the correct one!
+    if "albert-base-v2" in args.model_name_or_path:
+        args.tokenizer_name = "albert-base-v2"
+    elif "bert-base-cased" in args.model_name_or_path:
+        args.tokenizer_name = "bert-base-cased"
+
     tokenizer = AutoTokenizer.from_pretrained(
         args.tokenizer_name,
         use_fast=False,
