@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[38]:
+# In[16]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -39,6 +39,7 @@ from datasets import DatasetDict
 
 import transformers
 from transformers import (
+    AutoModelForMaskedLM,
     AutoConfig,
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -102,24 +103,29 @@ def generate_training_args(args, perturbed_type):
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
     
     if len(args.model_name_or_path.split("/")) > 1:
-        run_name = "{0}_task_{1}_finetune_{2}".format(
+        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}".format(
             date_time,
             args.task_name,
             "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
+            args.reinit_embeddings,
+            args.reinit_avg_embeddings,
         )
     else:
         if args.no_pretrain:
-            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_avg_{3}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
+                args.reinit_embeddings,
                 args.reinit_avg_embeddings,
             )
         else:
-            run_name = "{0}_task_{1}_finetune_{2}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
+                args.reinit_embeddings,
+                args.reinit_avg_embeddings,
             )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -384,6 +390,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether to reinit embeddings to be the average embeddings.")
+    parser.add_argument("--reinit_embeddings",
+                        default=False,
+                        action='store_true',
+                        help="Whether to reinit embeddings to be the random embeddings.")
     parser.add_argument("--train_embeddings_only",
                         default=False,
                         action='store_true',
@@ -512,16 +522,6 @@ if __name__ == "__main__":
     if args.no_pretrain:
         logger.info("***** Training new model from scratch *****")
         model = AutoModelForSequenceClassification.from_config(config)
-        if args.reinit_avg_embeddings:
-            logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
-            pretrained_model = AutoModelForSequenceClassification.from_pretrained(
-                args.model_name_or_path,
-                from_tf=False,
-                config=config,
-                cache_dir=args.cache_dir
-            )
-            avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
-            model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
     else:
         model = AutoModelForSequenceClassification.from_pretrained(
             args.model_name_or_path,
@@ -529,7 +529,28 @@ if __name__ == "__main__":
             config=config,
             cache_dir=args.cache_dir
         )
-        
+    
+    assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
+    
+    if args.reinit_avg_embeddings:
+        logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
+        pretrained_model = AutoModelForSequenceClassification.from_pretrained(
+            args.model_name_or_path,
+            from_tf=False,
+            config=config,
+            cache_dir=args.cache_dir
+        )
+        avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
+        model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
+    elif args.reinit_embeddings:
+        logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
+        random_model = AutoModelForSequenceClassification.from_config(config)
+        # random_model.resize_token_embeddings(len(tokenizer))
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+    else:
+        pass
+    
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
@@ -604,34 +625,4 @@ if __name__ == "__main__":
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
-
-
-# In[2]:
-
-
-import torch
-
-
-# In[8]:
-
-
-a = torch.rand(1,3)
-
-
-# In[10]:
-
-
-b = torch.rand(3,3)
-
-
-# In[11]:
-
-
-a.expand_as(b)
-
-
-# In[ ]:
-
-
-
 

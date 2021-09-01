@@ -103,6 +103,12 @@ class ModelArguments:
             "with private models)."
         },
     )
+    reinit_avg_embeddings: bool = field(
+        default=False, metadata={"help": "Whether to reinit the embedding layer using the averaged embedding."},
+    )
+    reinit_embeddings: bool = field(
+        default=False, metadata={"help": "Whether to reinit the embedding layer."},
+    )
 
 @dataclass
 class DataTrainingArguments:
@@ -164,7 +170,7 @@ class DataTrainingArguments:
     random_order: bool = field(
         default=False, metadata={"help": "Whether to random order the sequence."},
     )
-        
+
     def __post_init__(self):
         if self.dataset_name is None and self.train_file is None and self.validation_file is None:
             raise ValueError("Need either a dataset name or a training/validation file.")
@@ -202,7 +208,7 @@ def main():
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}".format(
+    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}_reinit_emb_{8}_reinit_avg_{9}".format(
         date_time,
         model_args.model_name_or_path,
         model_args.tokenizer_name,
@@ -211,6 +217,8 @@ def main():
         data_args.inoculation_percentage,
         data_args.reverse_order,
         data_args.random_order,
+        model_args.reinit_embeddings,
+        model_args.reinit_avg_embeddings,
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -307,6 +315,25 @@ def main():
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     if model_args.tokenizer_name != model_args.model_name_or_path:
         model.resize_token_embeddings(len(tokenizer))
+
+    if model_args.reinit_avg_embeddings:
+        logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
+        replacing_embeddings = torch.mean(model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
+        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+    elif model_args.reinit_embeddings:
+        logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
+        random_model = AutoModelForMaskedLM.from_config(config)
+        random_model.resize_token_embeddings(len(tokenizer))
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+    else:
+        # do nothing.
+        pass
+        
+    assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
+    
+    # we also enhance this a little bit.
+    # there are a couple of ways to
         
     # load from pre-processed wikitext data files
     if data_args.train_file is None:
@@ -448,4 +475,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+# In[ ]:
+
+
+
 
