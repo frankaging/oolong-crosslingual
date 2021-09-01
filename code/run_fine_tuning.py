@@ -379,6 +379,10 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether to use pretrained model if provided.")
+    parser.add_argument("--reinit_avg_embeddings",
+                        default=False,
+                        action='store_true',
+                        help="Whether to reinit embeddings to be the average embeddings.")
     parser.add_argument("--train_embeddings_only",
                         default=False,
                         action='store_true',
@@ -501,6 +505,16 @@ if __name__ == "__main__":
     if args.no_pretrain:
         logger.info("***** Training new model from scratch *****")
         model = AutoModelForSequenceClassification.from_config(config)
+        if args.reinit_avg_embeddings:
+            logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
+            pretrained_model = AutoModelForSequenceClassification.from_pretrained(
+                args.model_name_or_path,
+                from_tf=False,
+                config=config,
+                cache_dir=args.cache_dir
+            )
+            avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
+            model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
     else:
         model = AutoModelForSequenceClassification.from_pretrained(
             args.model_name_or_path,
@@ -583,4 +597,34 @@ if __name__ == "__main__":
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
+
+
+# In[2]:
+
+
+import torch
+
+
+# In[8]:
+
+
+a = torch.rand(1,3)
+
+
+# In[10]:
+
+
+b = torch.rand(3,3)
+
+
+# In[11]:
+
+
+a.expand_as(b)
+
+
+# In[ ]:
+
+
+
 

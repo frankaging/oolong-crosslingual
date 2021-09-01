@@ -402,7 +402,10 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
     )
-
+    
+    # print out the model to see.
+    print(model)
+    
     # Training
     if training_args.do_train:
         train_result = trainer.train()
