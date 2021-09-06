@@ -482,13 +482,16 @@ if __name__ == "__main__":
     
     training_args = generate_training_args(args, perturbed_type)
     
+    need_resize = False
     if inoculation_p == 0.0:
         logger.warning(f"***** WARNING: Detected inoculation_p={inoculation_p}; initialize the model and the tokenizer from huggingface. *****")
         # we need to make sure tokenizer is the correct one!
         if "albert-base-v2" in args.model_name_or_path:
             args.tokenizer_name = "albert-base-v2"
+            need_resize = True
         elif "bert-base-cased" in args.model_name_or_path:
             args.tokenizer_name = "bert-base-cased"
+            need_resize = True
         else:
             args.tokenizer_name = "roberta-base"
         args.model_name_or_path = "roberta-base"
@@ -529,6 +532,11 @@ if __name__ == "__main__":
             config=config,
             cache_dir=args.cache_dir
         )
+
+    if need_resize:
+        # this means, we are finetuning directly with new tokenizer.
+        # so the model itself has a different tokenizer, we need to resize.
+        model.resize_token_embeddings(len(tokenizer))
     
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
