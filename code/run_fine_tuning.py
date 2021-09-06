@@ -484,8 +484,14 @@ if __name__ == "__main__":
     
     if inoculation_p == 0.0:
         logger.warning(f"***** WARNING: Detected inoculation_p={inoculation_p}; initialize the model and the tokenizer from huggingface. *****")
+        # we need to make sure tokenizer is the correct one!
+        if "albert-base-v2" in args.model_name_or_path:
+            args.tokenizer_name = "albert-base-v2"
+        elif "bert-base-cased" in args.model_name_or_path:
+            args.tokenizer_name = "bert-base-cased"
+        else:
+            args.tokenizer_name = "roberta-base"
         args.model_name_or_path = "roberta-base"
-        args.tokenizer_name = "roberta-base"
         
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
@@ -506,12 +512,6 @@ if __name__ == "__main__":
             logger.info(f"***** WARNING: You are trying to train with first {args.n_layer_to_finetune} layers only *****")
             logger.info(f"***** WARNING: But the model has only {config.num_hidden_layers} layers *****")
             config.num_hidden_layers = args.n_layer_to_finetune
-    
-    # we need to make sure tokenizer is the correct one!
-    if "albert-base-v2" in args.model_name_or_path:
-        args.tokenizer_name = "albert-base-v2"
-    elif "bert-base-cased" in args.model_name_or_path:
-        args.tokenizer_name = "bert-base-cased"
 
     tokenizer = AutoTokenizer.from_pretrained(
         args.tokenizer_name,
