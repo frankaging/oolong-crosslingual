@@ -453,6 +453,7 @@ if __name__ == "__main__":
     
     perturbed_type = ""
     
+    inoculation_p = 0.0
     if not args.no_pretrain:
         for i in range(len(name_list)):
             if name_list[i] == "seed":
@@ -472,8 +473,6 @@ if __name__ == "__main__":
                     perturbed_type = "-".join(name_list[i+1].split("-")[2:])
             if name_list[i] == "inoculation":
                 inoculation_p = float(name_list[i+1])
-    else:
-        inoculation_p = 0.0
     
     if perturbed_type == "":
         args.train_file = f"../data-files/{args.task_name}"
