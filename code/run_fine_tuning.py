@@ -230,7 +230,7 @@ class HuggingFaceRoBERTaBase:
         # Initialize our Trainer. We are only intersted in evaluations
         trainer = Trainer(
             model=model,
-            # args=training_args,
+            args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=asenti_compute_metrics,
