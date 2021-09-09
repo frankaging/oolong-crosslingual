@@ -314,7 +314,27 @@ def main():
     logger.info(f"***** model type: {model_args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     if model_args.tokenizer_name != model_args.model_name_or_path:
+        logger.info("***** Replacing the word_embeddings and token_type_embeddings with random initialized values *****")
         model.resize_token_embeddings(len(tokenizer))
+        # If we resize, we also enforce it to reinit
+        # so we are controlling for weights distribution.
+        random_model = AutoModelForSequenceClassification.from_pretrained(
+            model_args.tokenizer_name,
+            from_tf=False,
+            config=config,
+            cache_dir=args.cache_dir
+        )
+        if "albert" in model_args.tokenizer_name:
+            replacing_embeddings = random_model.albert.embeddings.word_embeddings.weight.data
+            replacing_type_embeddings = random_model.albert.embeddings.self.token_type_embeddings.weight.data
+        elif "bert-base" in model_args.tokenizer_name:
+            replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data
+            replacing_type_embeddings = random_model.bert.embeddings.self.token_type_embeddings.weight.data
+        else:
+            assert False
+        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+        # this may also mean type embedding is also changed.
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
 
     if model_args.reinit_avg_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")

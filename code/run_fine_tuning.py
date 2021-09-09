@@ -536,10 +536,30 @@ if __name__ == "__main__":
         )
 
     if need_resize:
+        logger.info("***** Replacing the word_embeddings and token_type_embeddings with random initialized values *****")
         # this means, we are finetuning directly with new tokenizer.
         # so the model itself has a different tokenizer, we need to resize.
         model.resize_token_embeddings(len(tokenizer))
-    
+        # If we resize, we also enforce it to reinit
+        # so we are controlling for weights distribution.
+        random_model = AutoModelForSequenceClassification.from_pretrained(
+            args.tokenizer_name,
+            from_tf=False,
+            config=config,
+            cache_dir=args.cache_dir
+        )
+        if "albert-base-v2" in args.model_name_or_path:
+            replacing_embeddings = random_model.albert.embeddings.word_embeddings.weight.data
+            replacing_type_embeddings = random_model.albert.embeddings.self.token_type_embeddings.weight.data
+        elif "bert-base-cased" in args.model_name_or_path:
+            replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data
+            replacing_type_embeddings = random_model.bert.embeddings.self.token_type_embeddings.weight.data
+        else:
+            assert False
+        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+        # this may also mean type embedding is also changed.
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+        
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     if args.reinit_avg_embeddings:
@@ -635,22 +655,4 @@ if __name__ == "__main__":
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
-
-
-# In[38]:
-
-
-datasets = DatasetDict.load_from_disk("../data-files/qnli/")
-
-
-# In[44]:
-
-
-datasets["train"]
-
-
-# In[ ]:
-
-
-
 
