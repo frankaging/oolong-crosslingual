@@ -542,18 +542,24 @@ if __name__ == "__main__":
         model.resize_token_embeddings(len(tokenizer))
         # If we resize, we also enforce it to reinit
         # so we are controlling for weights distribution.
+        random_config = AutoConfig.from_pretrained(
+            args.tokenizer_name, 
+            num_labels=NUM_LABELS,
+            finetuning_task=args.task_name,
+            cache_dir=args.cache_dir
+        )
         random_model = AutoModelForSequenceClassification.from_pretrained(
             args.tokenizer_name,
             from_tf=False,
-            config=config,
+            config=random_config,
             cache_dir=args.cache_dir
         )
-        if "albert-base-v2" in args.model_name_or_path:
+        if "albert-" in args.tokenizer_name:
             replacing_embeddings = random_model.albert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.albert.embeddings.self.token_type_embeddings.weight.data
-        elif "bert-base-cased" in args.model_name_or_path:
+            replacing_type_embeddings = random_model.albert.embeddings.token_type_embeddings.weight.data
+        elif "bert-base-" in args.tokenizer_name:
             replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.bert.embeddings.self.token_type_embeddings.weight.data
+            replacing_type_embeddings = random_model.bert.embeddings.token_type_embeddings.weight.data
         else:
             assert False
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
