@@ -558,6 +558,10 @@ if __name__ == "__main__":
     else:
         pass
     
+    print(len(tokenizer))
+    print(model.roberta.embeddings.word_embeddings.weight.data.shape[0])
+    FAIL()
+    
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
@@ -632,22 +636,4 @@ if __name__ == "__main__":
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
-
-
-# In[38]:
-
-
-datasets = DatasetDict.load_from_disk("../data-files/qnli/")
-
-
-# In[43]:
-
-
-set(datasets["train"]["label"])
-
-
-# In[ ]:
-
-
-
 
