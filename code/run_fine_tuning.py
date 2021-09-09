@@ -543,30 +543,28 @@ if __name__ == "__main__":
         # If we resize, we also enforce it to reinit
         # so we are controlling for weights distribution.
         random_config = AutoConfig.from_pretrained(
+            args.model_name_or_path, 
+            num_labels=NUM_LABELS,
+            finetuning_task=args.task_name,
+            cache_dir=args.cache_dir
+        )
+        # we need to check if type embedding need to be resized as well.
+        tokenizer_config = AutoConfig.from_pretrained(
             args.tokenizer_name, 
             num_labels=NUM_LABELS,
             finetuning_task=args.task_name,
             cache_dir=args.cache_dir
         )
-        random_model = AutoModelForSequenceClassification.from_pretrained(
-            args.tokenizer_name,
-            from_tf=False,
+        # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
+        random_config.type_vocab_size = tokenizer_config.type_vocab_size
+        random_model = AutoModelForSequenceClassification.from_config(
             config=random_config,
-            cache_dir=args.cache_dir
         )
-        if "albert-" in args.tokenizer_name:
-            replacing_embeddings = random_model.albert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.albert.embeddings.token_type_embeddings.weight.data
-        elif "bert-base-" in args.tokenizer_name:
-            replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.bert.embeddings.token_type_embeddings.weight.data
-        else:
-            assert False
+        random_model.resize_token_embeddings(len(tokenizer))
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        # this may also mean type embedding is also changed.
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
-        
-    assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     if args.reinit_avg_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
@@ -578,14 +576,28 @@ if __name__ == "__main__":
         )
         avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
         model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
+        # to keep consistent, we also need to reinit the type embeddings.
+        random_model = AutoModelForSequenceClassification.from_config(
+            config=config,
+        )
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     elif args.reinit_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
         random_model = AutoModelForSequenceClassification.from_config(config)
         # random_model.resize_token_embeddings(len(tokenizer))
         replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+        # to keep consistent, we also need to reinit the type embeddings.
+        random_model = AutoModelForSequenceClassification.from_config(
+            config=config,
+        )
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     else:
         pass
+    
+    assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")

@@ -315,42 +315,60 @@ def main():
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     if model_args.tokenizer_name != model_args.model_name_or_path:
         logger.info("***** Replacing the word_embeddings and token_type_embeddings with random initialized values *****")
+        # this means, we are finetuning directly with new tokenizer.
+        # so the model itself has a different tokenizer, we need to resize.
         model.resize_token_embeddings(len(tokenizer))
         # If we resize, we also enforce it to reinit
         # so we are controlling for weights distribution.
-        random_config = AutoConfig.from_pretrained(model_args.tokenizer_name, **config_kwargs)
-        random_model = AutoModelForMaskedLM.from_pretrained(
-            model_args.tokenizer_name,
-            from_tf=False,
-            config=random_config,
-            cache_dir=model_args.cache_dir
+        random_config = AutoConfig.from_pretrained(
+            args.model_name_or_path, 
+            num_labels=NUM_LABELS,
+            finetuning_task=args.task_name,
+            cache_dir=args.cache_dir
         )
-        if "albert-" in model_args.tokenizer_name:
-            replacing_embeddings = random_model.albert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.albert.embeddings.token_type_embeddings.weight.data
-        elif "bert-base" in model_args.tokenizer_name:
-            replacing_embeddings = random_model.bert.embeddings.word_embeddings.weight.data
-            replacing_type_embeddings = random_model.bert.embeddings.token_type_embeddings.weight.data
-        else:
-            assert False
+        # we need to check if type embedding need to be resized as well.
+        tokenizer_config = AutoConfig.from_pretrained(
+            args.tokenizer_name, 
+            num_labels=NUM_LABELS,
+            finetuning_task=args.task_name,
+            cache_dir=args.cache_dir
+        )
+        # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
+        random_config.type_vocab_size = tokenizer_config.type_vocab_size
+        random_model = AutoModelForMaskedLM.from_config(
+            config=random_config,
+        )
+        random_model.resize_token_embeddings(len(tokenizer))
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        # this may also mean type embedding is also changed.
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
 
     if model_args.reinit_avg_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
         replacing_embeddings = torch.mean(model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+        # to keep consistent, we also need to reinit the type embeddings.
+        random_model = AutoModelForMaskedLM.from_config(
+            config=config,
+        )
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     elif model_args.reinit_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
         random_model = AutoModelForMaskedLM.from_config(config)
-        random_model.resize_token_embeddings(len(tokenizer))
         replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+        # to keep consistent, we also need to reinit the type embeddings.
+        random_model = AutoModelForMaskedLM.from_config(
+            config=config,
+        )
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     else:
         # do nothing.
         pass
-        
+
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     # we also enhance this a little bit.
