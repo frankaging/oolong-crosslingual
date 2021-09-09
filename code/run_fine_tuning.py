@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[16]:
+# In[37]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -230,7 +230,7 @@ class HuggingFaceRoBERTaBase:
         # Initialize our Trainer. We are only intersted in evaluations
         trainer = Trainer(
             model=model,
-            args=training_args,
+            # args=training_args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
             compute_metrics=asenti_compute_metrics,
@@ -632,4 +632,22 @@ if __name__ == "__main__":
                          training_args, max_length=args.max_seq_length,
                          inoculation_patience_count=args.inoculation_patience_count, pd_format=pd_format, 
                          scramble_proportion=args.scramble_proportion, eval_with_scramble=args.eval_with_scramble)
+
+
+# In[38]:
+
+
+datasets = DatasetDict.load_from_disk("../data-files/qnli/")
+
+
+# In[43]:
+
+
+set(datasets["train"]["label"])
+
+
+# In[ ]:
+
+
+
 
