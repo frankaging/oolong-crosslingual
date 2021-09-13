@@ -322,15 +322,11 @@ def main():
         # so we are controlling for weights distribution.
         random_config = AutoConfig.from_pretrained(
             model_args.model_name_or_path, 
-            num_labels=NUM_LABELS,
-            finetuning_task=args.task_name,
             cache_dir=args.cache_dir
         )
         # we need to check if type embedding need to be resized as well.
         tokenizer_config = AutoConfig.from_pretrained(
             model_args.tokenizer_name, 
-            num_labels=NUM_LABELS,
-            finetuning_task=args.task_name,
             cache_dir=args.cache_dir
         )
         # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
