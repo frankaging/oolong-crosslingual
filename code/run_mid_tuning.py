@@ -321,14 +321,14 @@ def main():
         # If we resize, we also enforce it to reinit
         # so we are controlling for weights distribution.
         random_config = AutoConfig.from_pretrained(
-            args.model_name_or_path, 
+            model_args.model_name_or_path, 
             num_labels=NUM_LABELS,
             finetuning_task=args.task_name,
             cache_dir=args.cache_dir
         )
         # we need to check if type embedding need to be resized as well.
         tokenizer_config = AutoConfig.from_pretrained(
-            args.tokenizer_name, 
+            model_args.tokenizer_name, 
             num_labels=NUM_LABELS,
             finetuning_task=args.task_name,
             cache_dir=args.cache_dir
@@ -339,9 +339,9 @@ def main():
             config=random_config,
         )
         random_model.resize_token_embeddings(len(tokenizer))
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
 
     if model_args.reinit_avg_embeddings:
@@ -352,18 +352,18 @@ def main():
         random_model = AutoModelForMaskedLM.from_config(
             config=config,
         )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     elif model_args.reinit_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
         random_model = AutoModelForMaskedLM.from_config(config)
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
         # to keep consistent, we also need to reinit the type embeddings.
         random_model = AutoModelForMaskedLM.from_config(
             config=config,
         )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     else:
         # do nothing.
