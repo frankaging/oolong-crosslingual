@@ -322,12 +322,12 @@ def main():
         # so we are controlling for weights distribution.
         random_config = AutoConfig.from_pretrained(
             model_args.model_name_or_path, 
-            cache_dir=args.cache_dir
+            cache_dir=model_args.cache_dir
         )
         # we need to check if type embedding need to be resized as well.
         tokenizer_config = AutoConfig.from_pretrained(
             model_args.tokenizer_name, 
-            cache_dir=args.cache_dir
+            cache_dir=model_args.cache_dir
         )
         # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
         random_config.type_vocab_size = tokenizer_config.type_vocab_size
