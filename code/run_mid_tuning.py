@@ -63,6 +63,14 @@ from functools import partial
 
 
 def random_corrupt(task, tokenizer, vocab_match, example):
+    TASK_CONFIG = {
+        "sst3": ("text", None),
+        "cola": ("sentence", None),
+        "mnli": ("premise", "hypothesis"),
+        "snli": ("premise", "hypothesis"),
+        "mrpc": ("sentence1", "sentence2"),
+        "qnli": ("question", "sentence")
+    }
     # for tasks that have single sentence
     if task == "sst3" or task == "wiki-text" or task == "cola":
         original_sentence = example[TASK_CONFIG[task][0]]
