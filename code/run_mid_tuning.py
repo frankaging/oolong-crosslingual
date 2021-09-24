@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[9]:
+# In[12]:
 
 
 # coding=utf-8
@@ -58,7 +58,7 @@ MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
-# In[2]:
+# In[13]:
 
 
 def random_corrupt(task, tokenizer, vocab_match, example):
@@ -244,7 +244,7 @@ def main():
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
-    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}_reinit_emb_{8}_reinit_avg_{9}".format(
+    run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}_reinit_emb_{8}_reinit_avg_{9}_token_s_{10}_word_s_{11}".format(
         date_time,
         model_args.model_name_or_path,
         model_args.tokenizer_name,
@@ -255,6 +255,8 @@ def main():
         data_args.random_order,
         model_args.reinit_embeddings,
         model_args.reinit_avg_embeddings,
+        model_args.token_swapping,
+        model_args.word_swapping
     )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
