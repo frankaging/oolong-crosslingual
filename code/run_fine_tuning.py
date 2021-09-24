@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[37]:
+# In[45]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -106,29 +106,35 @@ def generate_training_args(args, perturbed_type):
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
     
     if len(args.model_name_or_path.split("/")) > 1:
-        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}".format(
+        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
             date_time,
             args.task_name,
             "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
             args.reinit_embeddings,
             args.reinit_avg_embeddings,
+            args.token_swapping,
+            args.word_swapping
         )
     else:
         if args.no_pretrain:
-            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
                 args.reinit_embeddings,
                 args.reinit_avg_embeddings,
+                args.token_swapping,
+                args.word_swapping
             )
         else:
-            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
                 args.reinit_embeddings,
                 args.reinit_avg_embeddings,
+                args.token_swapping,
+                args.word_swapping
             )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -397,6 +403,18 @@ if __name__ == "__main__":
                         default=False,
                         action='store_true',
                         help="Whether to reinit embeddings to be the random embeddings.")
+    parser.add_argument("--token_swapping",
+                        default=False,
+                        action='store_true',
+                        help="Whether to swap token randomly.")
+    parser.add_argument("--word_swapping",
+                        default=False,
+                        action='store_true',
+                        help="Whether to swap words randomly.")
+    parser.add_argument("--swap_vocab_file",
+                        default="../data-files/wikitext-15M-vocab.json",
+                        type=str,
+                        help="Please provide a vocab file if you want to do word swapping.")
     parser.add_argument("--train_embeddings_only",
                         default=False,
                         action='store_true',
@@ -504,6 +522,12 @@ if __name__ == "__main__":
         finetuning_task=args.task_name,
         cache_dir=args.cache_dir
     )
+    
+    if need_resize:
+        # we need to rewrite the number of type token a little
+        # during pretraining, there are two types for reberta
+        # during fine-tuning, i think we are only using one?
+        config.type_vocab_size = 2
 
     if args.n_layer_to_finetune != -1:
         # then we are only finetuning n-th layer, not all the layers
@@ -561,9 +585,9 @@ if __name__ == "__main__":
             config=random_config,
         )
         random_model.resize_token_embeddings(len(tokenizer))
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     
     if args.reinit_avg_embeddings:
@@ -580,22 +604,38 @@ if __name__ == "__main__":
         random_model = AutoModelForSequenceClassification.from_config(
             config=config,
         )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     elif args.reinit_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
         random_model = AutoModelForSequenceClassification.from_config(config)
         # random_model.resize_token_embeddings(len(tokenizer))
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data
+        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
         # to keep consistent, we also need to reinit the type embeddings.
         random_model = AutoModelForSequenceClassification.from_config(
             config=config,
         )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data
+        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     else:
         pass
+    
+    if args.token_swapping:
+        logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
+        original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
+        perm_idx = torch.randperm(original_embeddings.size()[0])
+        swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
+        model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
+    elif args.word_swapping:
+        logger.info("***** WARNING: We are swapping words in the inputs. *****")
+        token_frequency_map = json.load(open(args.swap_vocab_file))
+        wikitext_vocab = list(set(token_frequency_map.keys()))
+        wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
+        random.shuffle(wikitext_vocab_copy)
+        word_swap_map = {}
+        for i in range(len(wikitext_vocab)):
+            word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
     
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
@@ -661,6 +701,26 @@ if __name__ == "__main__":
         datasets["validation"] = datasets["validation"].map(random_order)
         datasets["test"] = datasets["test"].map(random_order)
     # we don't care about test set in this script?
+
+    if args.word_swapping:
+        logger.warning("WARNING: performing word swapping.")
+        # we need to do the swap on the data files.
+        # this tokenizer helps you to get piece length for each token
+        modified_tokenizer = ModifiedBertTokenizer(
+            vocab_file="../data-files/bert_vocab.txt")
+        modified_basic_tokenizer = ModifiedBasicTokenizer()
+        datasets["train"] = datasets["train"].map(partial(random_corrupt, 
+                                                       args.task_name,
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
+        datasets["validation"] = datasets["validation"].map(partial(random_corrupt, 
+                                                       args.task_name,
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
+        datasets["test"] = datasets["test"].map(partial(random_corrupt, 
+                                                       args.task_name,
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
 
     # this may not always start for zero inoculation
     datasets["train"] = datasets["train"].shuffle(seed=args.seed)
