@@ -17,6 +17,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import matthews_corrcoef
+from vocab_mismatch_utils import *
 
 import logging
 logger = logging.getLogger(__name__)
