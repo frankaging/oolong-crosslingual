@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[9]:
 
 
 # coding=utf-8
@@ -51,7 +51,7 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import is_main_process
-
+from vocab_mismatch_utils import *
 
 logger = logging.getLogger(__name__)
 MODEL_CONFIG_CLASSES = list(MODEL_FOR_MASKED_LM_MAPPING.keys())
@@ -60,6 +60,32 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 # In[2]:
 
+
+def random_corrupt(task, tokenizer, vocab_match, example):
+    # for tasks that have single sentence
+    if task == "sst3" or task == "wiki-text" or task == "cola":
+        original_sentence = example[TASK_CONFIG[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][0]] = corrupted_sentence
+    # for tasks that have two sentences
+    elif task == "mrpc" or task == "mnli" or task == "snli" or task == "qnli":
+        original_sentence = example[TASK_CONFIG[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][0]] = corrupted_sentence
+        
+        original_sentence = example[TASK_CONFIG[task][1]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][1]] = corrupted_sentence
+    elif task == "conll2003" or task == "en_ewt":
+        original_tokens = example[TASK_CONFIG[task][0]]
+        corrupted_tokens = [vocab_match[t] for t in original_tokens]
+        example[TASK_CONFIG[task][0]] = corrupted_tokens
+    else:
+        print(f"task={task} not supported yet!")
+    return example
 
 @dataclass
 class ModelArguments:
@@ -108,6 +134,16 @@ class ModelArguments:
     )
     reinit_embeddings: bool = field(
         default=False, metadata={"help": "Whether to reinit the embedding layer."},
+    )
+    token_swapping: bool = field(
+        default=False, metadata={"help": "Whether to swap token randomly."},
+    )
+    word_swapping: bool = field(
+        default=False, metadata={"help": "Whether to swap word randomly."},
+    )
+    swap_vocab_file: Optional[str] = field(
+        default="../data-files/wikitext-15M-vocab.json",
+        metadata={"help": "Please provide a vocab file if you want to do word swapping."},
     )
 
 @dataclass
@@ -365,6 +401,22 @@ def main():
         # do nothing.
         pass
 
+    if model_args.token_swapping:
+        logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
+        original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
+        perm_idx = torch.randperm(original_embeddings.size()[0])
+        swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
+        model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
+    elif model_args.word_swapping:
+        logger.info("***** WARNING: We are swapping words in the inputs. *****")
+        token_frequency_map = json.load(open(model_args.swap_vocab_file))
+        wikitext_vocab = list(set(token_frequency_map.keys()))
+        wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
+        random.Random(training_args.seed).shuffle(wikitext_vocab_copy)
+        word_swap_map = {}
+        for i in range(len(wikitext_vocab)):
+            word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
+    
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     # we also enhance this a little bit.
@@ -409,6 +461,26 @@ def main():
         datasets["validation"] = datasets["validation"].map(random_order)
         datasets["test"] = datasets["test"].map(random_order)
     # we don't care about test set in this script?
+    
+    if model_args.word_swapping:
+        logger.warning("WARNING: performing word swapping.")
+        # we need to do the swap on the data files.
+        # this tokenizer helps you to get piece length for each token
+        modified_tokenizer = ModifiedBertTokenizer(
+            vocab_file="../data-files/bert_vocab.txt")
+        modified_basic_tokenizer = ModifiedBasicTokenizer()
+        datasets["train"] = datasets["train"].map(partial(random_corrupt, 
+                                                       "wiki-text",
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
+        datasets["validation"] = datasets["validation"].map(partial(random_corrupt, 
+                                                       "wiki-text",
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
+        datasets["test"] = datasets["test"].map(partial(random_corrupt, 
+                                                       "wiki-text",
+                                                       modified_basic_tokenizer, 
+                                                       word_swap_map))
     
     # Preprocessing the datasets.
     # First we tokenize all the texts.
@@ -510,10 +582,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-# In[ ]:
-
-
-
 
