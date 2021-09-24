@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[45]:
+# In[80]:
 
 
 # Load modules, mainly huggingface basic model handlers.
@@ -57,7 +57,7 @@ from transformers.trainer_utils import is_main_process, EvaluationStrategy
 from functools import partial
 
 
-# In[ ]:
+# In[81]:
 
 
 def generate_training_args(args, perturbed_type):
@@ -167,6 +167,32 @@ def generate_training_args(args, perturbed_type):
         transformers.utils.logging.enable_explicit_format()
     logger.info(f"Training/evaluation parameters {training_args}")
     return training_args
+
+def random_corrupt(task, tokenizer, vocab_match, example):
+    # for tasks that have single sentence
+    if task == "sst3" or task == "wiki-text" or task == "cola":
+        original_sentence = example[TASK_CONFIG[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][0]] = corrupted_sentence
+    # for tasks that have two sentences
+    elif task == "mrpc" or task == "mnli" or task == "snli" or task == "qnli":
+        original_sentence = example[TASK_CONFIG[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][0]] = corrupted_sentence
+        
+        original_sentence = example[TASK_CONFIG[task][1]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[TASK_CONFIG[task][1]] = corrupted_sentence
+    elif task == "conll2003" or task == "en_ewt":
+        original_tokens = example[TASK_CONFIG[task][0]]
+        corrupted_tokens = [vocab_match[t] for t in original_tokens]
+        example[TASK_CONFIG[task][0]] = corrupted_tokens
+    else:
+        print(f"task={task} not supported yet!")
+    return example
 
 
 # In[ ]:
