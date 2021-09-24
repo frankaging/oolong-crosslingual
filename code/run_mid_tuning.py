@@ -84,7 +84,7 @@ def random_corrupt(task, tokenizer, vocab_match, example):
         corrupted_tokens = [vocab_match[t] for t in original_tokens]
         example[TASK_CONFIG[task][0]] = corrupted_tokens
     else:
-        print(f"task={task} not supported yet!")
+        assert False
     return example
 
 @dataclass
