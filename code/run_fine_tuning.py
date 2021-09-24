@@ -8,7 +8,7 @@
 # Make sure you install huggingface and other packages properly.
 from collections import Counter
 import json
-
+import copy
 from nltk.tokenize import TweetTokenizer
 from sklearn.metrics import classification_report
 from sklearn.feature_extraction import DictVectorizer
