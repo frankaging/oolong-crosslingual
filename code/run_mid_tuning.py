@@ -64,6 +64,7 @@ from functools import partial
 
 def random_corrupt(task, tokenizer, vocab_match, example):
     TASK_CONFIG = {
+        "wiki-text": ("text", None),
         "sst3": ("text", None),
         "cola": ("sentence", None),
         "mnli": ("premise", "hypothesis"),
