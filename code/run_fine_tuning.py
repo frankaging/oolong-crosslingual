@@ -107,35 +107,38 @@ def generate_training_args(args, perturbed_type):
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
     
     if len(args.model_name_or_path.split("/")) > 1:
-        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
+        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
             date_time,
             args.task_name,
             "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
             args.reinit_embeddings,
             args.reinit_avg_embeddings,
             args.token_swapping,
-            args.word_swapping
+            args.word_swapping,
+            args.learning_rate
         )
     else:
         if args.no_pretrain:
-            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
                 args.reinit_embeddings,
                 args.reinit_avg_embeddings,
                 args.token_swapping,
-                args.word_swapping
+                args.word_swapping,
+                args.learning_rate
             )
         else:
-            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}".format(
+            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
                 args.reinit_embeddings,
                 args.reinit_avg_embeddings,
                 args.token_swapping,
-                args.word_swapping
+                args.word_swapping,
+                args.learning_rate
             )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
@@ -659,7 +662,7 @@ if __name__ == "__main__":
         token_frequency_map = json.load(open(args.swap_vocab_file))
         wikitext_vocab = list(set(token_frequency_map.keys()))
         wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
-        random.shuffle(wikitext_vocab_copy)
+        random.Random(args.seed).shuffle(wikitext_vocab_copy)
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
