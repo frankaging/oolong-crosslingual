@@ -107,7 +107,7 @@ def generate_training_args(args, perturbed_type):
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
     
     if len(args.model_name_or_path.split("/")) > 1:
-        run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
+        run_name = "{0}_task_{1}_ft_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
             date_time,
             args.task_name,
             "_".join(args.model_name_or_path.split("/")[1].split("_")[1:]),
@@ -119,7 +119,7 @@ def generate_training_args(args, perturbed_type):
         )
     else:
         if args.no_pretrain:
-            run_name = "{0}_task_{1}_finetune_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
+            run_name = "{0}_task_{1}_ft_{2}_no_pretrain_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
@@ -130,7 +130,7 @@ def generate_training_args(args, perturbed_type):
                 args.learning_rate
             )
         else:
-            run_name = "{0}_task_{1}_finetune_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
+            run_name = "{0}_task_{1}_ft_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}".format(
                 date_time,
                 args.task_name,
                 args.model_name_or_path,
