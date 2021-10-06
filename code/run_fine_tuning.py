@@ -560,7 +560,7 @@ if __name__ == "__main__":
         if args.tokenizer_name == "albert-base-v2":
             config.type_vocab_size = 1
         else:
-            config.type_vocab_size = 2
+            config.type_vocab_size = 1
 
     if args.n_layer_to_finetune != -1:
         # then we are only finetuning n-th layer, not all the layers
