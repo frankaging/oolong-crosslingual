@@ -417,7 +417,9 @@ def main():
     if model_args.token_swapping:
         logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
         original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
-        perm_idx = torch.randperm(original_embeddings.size()[0])
+        g = torch.Generator()
+        g.manual_seed(args.seed)
+        perm_idx = torch.randperm(original_embeddings.size()[0], generator=g)
         swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
         model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
     elif model_args.word_swapping:
