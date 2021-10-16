@@ -525,7 +525,9 @@ if __name__ == "__main__":
                     perturbed_type = "-".join(name_list[i+1].split("-")[2:])
             if name_list[i] == "inoculation":
                 inoculation_p = float(name_list[i+1])
-    
+    if "word_s_True" in args.model_name_or_path:
+        args.word_swapping = True
+        
     if perturbed_type == "":
         args.train_file = f"../data-files/{args.task_name}"
     else:
@@ -654,6 +656,8 @@ if __name__ == "__main__":
         model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     else:
         pass
+    
+    
     
     if args.token_swapping:
         logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
