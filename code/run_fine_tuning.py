@@ -556,15 +556,17 @@ if __name__ == "__main__":
         cache_dir=args.cache_dir
     )
     
+    if inoculation_p == 1.0 and os.path.isdir(args.model_name_or_path):
+        if "albert-base-v2" in args.model_name_or_path or "bert-base-cased" in args.model_name_or_path:
+            logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
+            config.type_vocab_size = 2
+    
     if need_resize:
         # we need to rewrite the number of type token a little
         # during pretraining, there are two types for reberta
         # during fine-tuning, i think we are only using one?
         if os.path.isdir(args.model_name_or_path):
-            if args.tokenizer_name == "albert-base-v2":
-                config.type_vocab_size = 1
-            else:
-                config.type_vocab_size = 2
+            pass
         else:
             if args.tokenizer_name == "albert-base-v2":
                 config.type_vocab_size = 1
@@ -688,6 +690,8 @@ if __name__ == "__main__":
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
+    
+    return
     
     # We cannot resize this. In the mid-tuning, this is already resized.
     # if args.tokenizer_name != args.model_name_or_path:
