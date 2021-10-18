@@ -691,7 +691,7 @@ if __name__ == "__main__":
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
     
-    return
+    FAIL()
     
     # We cannot resize this. In the mid-tuning, this is already resized.
     # if args.tokenizer_name != args.model_name_or_path:
