@@ -560,10 +560,13 @@ if __name__ == "__main__":
         # we need to rewrite the number of type token a little
         # during pretraining, there are two types for reberta
         # during fine-tuning, i think we are only using one?
-        if args.tokenizer_name == "albert-base-v2":
-            config.type_vocab_size = 1
+        if os.path.isdir(args.model_name_or_path):
+            pass
         else:
-            config.type_vocab_size = 1
+            if args.tokenizer_name == "albert-base-v2":
+                config.type_vocab_size = 1
+            else:
+                config.type_vocab_size = 1
 
     if args.n_layer_to_finetune != -1:
         # then we are only finetuning n-th layer, not all the layers
