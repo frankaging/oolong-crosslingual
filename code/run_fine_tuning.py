@@ -561,7 +561,10 @@ if __name__ == "__main__":
         # during pretraining, there are two types for reberta
         # during fine-tuning, i think we are only using one?
         if os.path.isdir(args.model_name_or_path):
-            pass
+            if args.tokenizer_name == "albert-base-v2":
+                config.type_vocab_size = 1
+            else:
+                config.type_vocab_size = 2
         else:
             if args.tokenizer_name == "albert-base-v2":
                 config.type_vocab_size = 1
