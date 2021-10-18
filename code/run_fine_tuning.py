@@ -500,7 +500,12 @@ if __name__ == "__main__":
     NUM_LABELS = 2 if args.task_name == "cola" or args.task_name == "mrpc" or args.task_name == "qnli" else 3
     MAX_SEQ_LEN = args.max_seq_length
     
-    args.tokenizer_name = args.model_name_or_path
+    if "albert-base-v2" in args.model_name_or_path:
+        args.tokenizer_name = "albert-base-v2"
+    elif "bert-base-cased" in args.model_name_or_path:
+        args.tokenizer_name = "bert-base-cased"
+    else:
+        args.tokenizer_name = args.model_name_or_path
     name_list = args.model_name_or_path.split("_")
     
     perturbed_type = ""
