@@ -690,9 +690,7 @@ if __name__ == "__main__":
     logger.info(f"***** Current setups *****")
     logger.info(f"***** model type: {args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {args.tokenizer_name} *****")
-    
-    FAIL()
-    
+
     # We cannot resize this. In the mid-tuning, this is already resized.
     # if args.tokenizer_name != args.model_name_or_path:
     #     model.resize_token_embeddings(len(tokenizer))
