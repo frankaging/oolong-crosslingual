@@ -14,7 +14,7 @@ sentences back when generating the perturbed datasets.
 """
 
 
-# In[9]:
+# In[35]:
 
 
 # Imports
@@ -40,6 +40,12 @@ text_fields_map = {
     "sst3":"text",
     "qnli":"question,sentence",
     "mrpc":"sentence1,sentence2",
+    "cola": "sentence",
+    "mnli": "premise,hypothesis",
+    "qqp": "question1,question2",
+    "rte": "sentence1,sentence2",
+    "stsb": "sentence1,sentence2",
+    "wnli": "sentence1,sentence2",
 }
 
 
@@ -82,6 +88,8 @@ def arg_parse():
                         help='Whether to resume for this file.')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed.')
+    parser.add_argument('--split', type=str, default="",
+                        help='What split to include.')
     parser.add_argument("--include_train",
                        default=False,
                        action='store_true',
@@ -129,7 +137,7 @@ if __name__ == "__main__":
     except:
         is_jupyter = False
         
-    if not args.include_train and not args.include_test and not args.include_validation:
+    if not args.include_train and not args.include_test and not args.include_validation and args.split == "":
         logging.error("Need to at least specify a single partition.")
         assert False
 
@@ -177,26 +185,15 @@ if __name__ == "__main__":
     
     logging.info("Removing any existing files including:")
     # output file cleanup if exist.
-    train_output_file = os.path.join(args.output_dir, f"{args.task}-train")
-    test_output_file = os.path.join(args.output_dir, f"{args.task}-test")
-    validation_output_file = os.path.join(args.output_dir, f"{args.task}-validation")
-    train_json_file = os.path.join(args.output_dir, f"{args.task}-train.json")
-    test_json_file = os.path.join(args.output_dir, f"{args.task}-test.json")
-    validation_json_file = os.path.join(args.output_dir, f"{args.task}-validation.json")
-    logging.info(train_output_file)
-    logging.info(validation_output_file)
-    logging.info(test_output_file)
-    logging.info(train_json_file)
-    logging.info(test_json_file)
-    logging.info(validation_json_file)
+    output_file = os.path.join(args.output_dir, f"{args.task}-{args.split}")
+    json_file = os.path.join(args.output_dir, f"{args.task}-{args.split}.json")
+    logging.info(output_file)
+    logging.info(json_file)
     try:
         for text_f in text_field:
-            os.remove(train_output_file+f"-{text_f}.conllu")
-            os.remove(test_output_file+f"-{text_f}.conllu")
-            os.remove(validation_output_file+f"-{text_f}.conllu")
-        os.remove(train_json_file)
-        os.remove(test_json_file)
-        os.remove(validation_json_file)
+            os.remove(output_file+f"-{text_f}.conllu")
+            os.remove(json_file+f"-{text_f}.conllu")
+        os.remove(json_file)
     except OSError:
         pass
     
@@ -245,15 +242,8 @@ if __name__ == "__main__":
         total_chunk = len(chunks)
         count = 0
         
-        if split == "train":
-            output_file = train_output_file
-            output_json = train_json_file
-        elif split == "test":
-            output_file = test_output_file
-            output_json = test_json_file
-        else:
-            output_file = validation_output_file
-            output_json = validation_json_file
+        output_file = os.path.join(args.output_dir, f"{args.task}-{split}")
+        output_json = os.path.join(args.output_dir, f"{args.task}-{split}.json")
         
         all_meta = {}
         for text_f in text_field:
@@ -285,12 +275,7 @@ if __name__ == "__main__":
         with open(output_json, "w") as fd:
             json.dump(all_meta, fd, indent=4)
             
-    if args.include_train:
-        preprocess(datasets, args, "train")
-    if args.include_validation:
-        preprocess(datasets, args, "validation")
-    if args.include_test:
-        preprocess(datasets, args, "test")
+    preprocess(datasets, args, args.split)
     
     logging.info("Saved Conllu files with metadata to:")
     logging.info(args.output_dir)
