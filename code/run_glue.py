@@ -570,7 +570,7 @@ def main():
         token_frequency_map = json.load(open(data_args.swap_vocab_file))
         wikitext_vocab = list(set(token_frequency_map.keys()))
         wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
-        random.Random(args.seed).shuffle(wikitext_vocab_copy)
+        random.Random(training_args.seed).shuffle(wikitext_vocab_copy)
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
