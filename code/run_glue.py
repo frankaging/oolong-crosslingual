@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[ ]:
+# In[1]:
 
 
 #!/usr/bin/env python
@@ -229,9 +229,6 @@ def main():
     # See all possible arguments in src/transformers/training_args.py
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
-
-    os.environ["TRANSFORMERS_CACHE"] = "./huggingface_inoculation_cache/"
-    os.environ["WANDB_PROJECT"] = f"fine_tuning"
     
     parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
@@ -241,6 +238,20 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # we hard-code these arguments just to make life eaiser!
+    os.environ["TRANSFORMERS_CACHE"] = "./huggingface_inoculation_cache/"
+    # with this, we could log into different places and interprete results directly.
+    if training_args.do_train:
+        os.environ["WANDB_PROJECT"] = f"big_transfer_train"
+    elif training_args.do_eval:
+        os.environ["WANDB_PROJECT"] = f"big_transfer_eval"
+    elif training_args.do_predict:
+        os.environ["WANDB_PROJECT"] = f"big_transfer_predict"
+    model_args.cache_dir = "./huggingface_inoculation_cache/"
+    training_args.save_total_limit = 1
+    training_args.output_dir = "../"
+    data_args.max_seq_length = 128
+    
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -254,6 +265,12 @@ def main():
     transformers.utils.logging.set_verbosity(log_level)
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
+    
+    # overwrite the training epoch a little.
+    if data_args.task_name == "mrpc" or data_args.task_name == "wnli":
+        training_args.num_train_epochs = 5
+    else:
+        training_args.num_train_epochs = 3
     
     # overwrite tokenizer based on model name.
     if "albert-base-v2" in model_args.model_name_or_path:
@@ -644,9 +661,7 @@ def main():
                                                            data_args.task_name,
                                                            modified_basic_tokenizer, 
                                                            word_swap_map))
-        
-    return
-    
+
     # Preprocessing the raw_datasets
     if data_args.task_name is not None:
         sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
