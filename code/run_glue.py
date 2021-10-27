@@ -72,6 +72,33 @@ task_to_keys = {
 logger = logging.getLogger(__name__)
 from functools import partial
 
+def random_corrupt(task, tokenizer, vocab_match, example):
+    # for tasks that have single sentence
+    if task == "sst3" or task == "wiki-text" or task == "cola" or task == "sst2":
+        original_sentence = example[task_to_keys[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[task_to_keys[task][0]] = corrupted_sentence
+    # for tasks that have two sentences
+    elif task == "mrpc" or task == "mnli" or task == "snli" or task == "qnli" or task == "qqp" or task == "rte" or task == "stsb" or task == "wnli":
+        original_sentence = example[task_to_keys[task][0]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[task_to_keys[task][0]] = corrupted_sentence
+        
+        original_sentence = example[task_to_keys[task][1]]
+        if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
+            corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
+            example[task_to_keys[task][1]] = corrupted_sentence
+    elif task == "conll2003" or task == "en_ewt":
+        original_tokens = example[task_to_keys[task][0]]
+        corrupted_tokens = [vocab_match[t] for t in original_tokens]
+        example[task_to_keys[task][0]] = corrupted_tokens
+    else:
+        print(f"task={task} not supported yet!")
+        assert False
+    return example
+
 
 # In[ ]:
 
