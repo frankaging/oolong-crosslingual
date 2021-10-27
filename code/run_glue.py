@@ -70,6 +70,7 @@ task_to_keys = {
 }
 
 logger = logging.getLogger(__name__)
+from functools import partial
 
 
 # In[ ]:
