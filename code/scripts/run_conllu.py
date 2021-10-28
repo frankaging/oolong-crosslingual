@@ -37,7 +37,7 @@ import pandas as pd
 
 text_fields_map = {
     "wikitext-15M":"text",
-    "sst2":"text",
+    "sst2":"sentence",
     "sst3":"text",
     "qnli":"question,sentence",
     "mrpc":"sentence1,sentence2",
