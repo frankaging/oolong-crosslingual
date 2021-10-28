@@ -482,7 +482,10 @@ def main():
             need_resize = True
         else:
             model_args.tokenizer_name = "roberta-base"
-        model_args.model_name_or_path = "roberta-base"  
+        model_args.model_name_or_path = "roberta-base"
+        # only if we are skipping mid-tunning, this flag can be then set.
+        if "token_s_True" in model_args.model_name_or_path:
+            data_args.token_swapping = True
 
     # Load pretrained model and tokenizer
     #
