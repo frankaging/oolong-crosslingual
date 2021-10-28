@@ -472,6 +472,9 @@ def main():
 
     need_resize = False
     if inoculation_p == 0.0:
+        # only if we are skipping mid-tunning, this flag can be then set.
+        if "token_s_True" in model_args.model_name_or_path:
+            data_args.token_swapping = True
         logger.warning(f"***** WARNING: Detected inoculation_p={inoculation_p}; initialize the model and the tokenizer from huggingface. *****")
         # we need to make sure tokenizer is the correct one!
         if "albert-base-v2" in model_args.model_name_or_path:
@@ -483,10 +486,7 @@ def main():
         else:
             model_args.tokenizer_name = "roberta-base"
         model_args.model_name_or_path = "roberta-base"
-        # only if we are skipping mid-tunning, this flag can be then set.
-        if "token_s_True" in model_args.model_name_or_path:
-            data_args.token_swapping = True
-
+        
     # Load pretrained model and tokenizer
     #
     # In distributed training, the .from_pretrained methods guarantee that only one local process can concurrently
