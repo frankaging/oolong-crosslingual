@@ -475,6 +475,8 @@ def main():
         # only if we are skipping mid-tunning, this flag can be then set.
         if "token_s_True" in model_args.model_name_or_path:
             data_args.token_swapping = True
+        if "reinit_emb_True" in model_args.model_name_or_path:
+            data_args.reinit_embeddings = True
         logger.warning(f"***** WARNING: Detected inoculation_p={inoculation_p}; initialize the model and the tokenizer from huggingface. *****")
         # we need to make sure tokenizer is the correct one!
         if "albert-base-v2" in model_args.model_name_or_path:
