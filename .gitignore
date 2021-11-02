@@ -1,3 +1,5 @@
+glue_evaluation_results.csv
+*_cache/
 runs/
 *.zip
 tmp/

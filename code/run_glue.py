@@ -28,10 +28,11 @@ import random
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-
+from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset, load_metric
+import csv
 
 import transformers
 from transformers import (
@@ -67,6 +68,22 @@ task_to_keys = {
     "sst2": ("sentence", None),
     "stsb": ("sentence1", "sentence2"),
     "wnli": ("sentence1", "sentence2"),
+}
+
+task_to_metrics = {
+    "cola": ["matthews_correlation"],
+    "mnli": ["accuracy"],
+    "mnli_mismatched": ["accuracy"],
+    "mnli_matched": ["accuracy"],
+    "mnli-mm": ["accuracy"],
+    "mrpc": ["accuracy", "f1"],
+    "qnli": ["accuracy"],
+    "qqp": ["accuracy", "f1"],
+    "rte": ["accuracy"],
+    "sst2": ["accuracy"],
+    "stsb": ["pearson", "spearmanr"],
+    "wnli": ["accuracy"],
+    "hans": ["accuracy"],
 }
 
 logger = logging.getLogger(__name__)
@@ -196,22 +213,22 @@ class DataTrainingArguments:
         default=1.0, metadata={"help": "TODO"}
     )  
         
-    def __post_init__(self):
-        if self.task_name is not None:
-            self.task_name = self.task_name.lower()
-            if self.task_name not in task_to_keys.keys():
-                raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
-        elif self.dataset_name is not None:
-            pass
-        elif self.train_file is None or self.validation_file is None:
-            raise ValueError("Need either a GLUE task, a training/validation file or a dataset name.")
-        else:
-            train_extension = self.train_file.split(".")[-1]
-            assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
-            validation_extension = self.validation_file.split(".")[-1]
-            assert (
-                validation_extension == train_extension
-            ), "`validation_file` should have the same extension (csv or json) as `train_file`."
+#     def __post_init__(self):
+#         if self.task_name is not None:
+#             self.task_name = self.task_name.lower()
+#             if self.task_name not in task_to_keys.keys():
+#                 raise ValueError("Unknown task, you should pick one in " + ",".join(task_to_keys.keys()))
+#         elif self.dataset_name is not None:
+#             pass
+#         elif self.train_file is None or self.validation_file is None:
+#             raise ValueError("Need either a GLUE task, a training/validation file or a dataset name.")
+#         else:
+#             train_extension = self.train_file.split(".")[-1]
+#             assert train_extension in ["csv", "json"], "`train_file` should be a csv or a json file."
+#             validation_extension = self.validation_file.split(".")[-1]
+#             assert (
+#                 validation_extension == train_extension
+#             ), "`validation_file` should have the same extension (csv or json) as `train_file`."
 
 
 @dataclass
@@ -294,11 +311,78 @@ def main():
     transformers.utils.logging.enable_default_handler()
     transformers.utils.logging.enable_explicit_format()
     
+    if training_args.do_eval:
+        # we need to automatically pick out the task name.
+        task_name_list = model_args.model_name_or_path.split("_")
+        for i in range(len(task_name_list)):
+            if task_name_list[i] == "task":
+                data_args.task_name = task_name_list[i+1]
+                break
+        assert data_args.task_name in list(task_to_keys.keys())
+        out_glue_task = data_args.task_name
+        out_model = "roberta-base"
+        if "albert-base-v2" in model_args.model_name_or_path:
+            out_tokenizer_name = "albert-base-v2"
+            out_reinit_embedding = True
+        elif "bert-base-cased" in model_args.model_name_or_path:
+            out_tokenizer_name = "bert-base-cased"
+            out_reinit_embedding = True
+        else:
+            out_tokenizer_name = "roberta-base"
+            if "reinit_emb_True" in model_args.model_name_or_path:
+                out_reinit_embedding = True
+            else:
+                out_reinit_embedding = False
+        if "inoculation_1.0" in model_args.model_name_or_path:
+            out_midtuning = True
+        elif "inoculation_0.0" in model_args.model_name_or_path:
+            out_midtuning = False
+        if "data_wikitext-15M-en~fr@N~fr@V" in model_args.model_name_or_path:
+            out_galactic_shift = "en~fr@N~fr@V"
+        elif "data_wikitext-15M-en~jaktc@N~jaktc@V" in model_args.model_name_or_path:
+            out_galactic_shift = "en~jaktc@N~jaktc@V"
+        elif "data_wikitext-15M-en~fr@N~jaktc@V" in model_args.model_name_or_path:
+            out_galactic_shift = "en~fr@N~jaktc@V"
+        else:
+            assert "data_wikitext-15M_" in model_args.model_name_or_path
+            out_galactic_shift = "null"
+
+        if "reverse_True" in model_args.model_name_or_path:
+            out_reverse = True
+        else:
+            out_reverse = False
+        if "random_True" in model_args.model_name_or_path:
+            out_random = True
+        else:
+            out_random = False
+        if "token_s_True" in model_args.model_name_or_path:
+            out_token_s = True
+        else:
+            out_token_s = False
+        if "word_s_True" in model_args.model_name_or_path:
+            out_word_s = True
+        else:
+            out_word_s = False
+        if "lr_4e-05" in model_args.model_name_or_path:
+            out_lr = 4e-05
+        elif "lr_2e-05" in model_args.model_name_or_path:
+            out_lr = 2e-05
+        else:
+            out_lr = 2e-05
+        
     # overwrite the training epoch a little.
     if data_args.task_name == "mrpc" or data_args.task_name == "wnli":
         training_args.num_train_epochs = 5
     else:
         training_args.num_train_epochs = 3
+    # overwrite the learning rate.
+    if "lr_4e-05" in model_args.model_name_or_path:
+        training_args.learning_rate = 4e-05
+    else:
+        training_args.learning_rate = 2e-05
+    
+    # this is for evaluation!
+    condition_name = model_args.model_name_or_path
     
     # overwrite tokenizer based on model name.
     if "albert-base-v2" in model_args.model_name_or_path:
@@ -338,7 +422,7 @@ def main():
         run_name = "{0}_task_{1}_ft_{2}".format(
             date_time,
             data_args.task_name,
-            "_".join(model_args.model_name_or_path.split("/")[1].split("_")[1:]),
+            "_".join(model_args.model_name_or_path.strip("/").split("/")[-1].strip("/").split("_")[1:]),
         )
     else:
         run_name = "{0}_task_{1}_ft_{2}_reinit_emb_{3}_reinit_avg_{4}_token_s_{5}_word_s_{6}_lr_{7}_seed_{8}_reverse_{9}_random_{10}".format(
@@ -356,8 +440,10 @@ def main():
         )
     training_args.run_name = run_name
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
-    training_args.output_dir = os.path.join(training_args.output_dir, run_name)
-    
+    if training_args.do_train:
+        training_args.output_dir = os.path.join(training_args.output_dir, run_name)
+    else:
+        training_args.output_dir = os.path.join(training_args.output_dir, "eval_finetuned_models", run_name)
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
@@ -487,7 +573,8 @@ def main():
             need_resize = True
         else:
             model_args.tokenizer_name = "roberta-base"
-        model_args.model_name_or_path = "roberta-base"
+        if training_args.do_train:
+            model_args.model_name_or_path = "roberta-base"
         
     # Load pretrained model and tokenizer
     #
@@ -501,18 +588,23 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    if inoculation_p == 1.0 and os.path.isdir(model_args.model_name_or_path):
+    if training_args.do_train:
+        if inoculation_p == 1.0 and os.path.isdir(model_args.model_name_or_path):
+            if "albert-base-v2" in model_args.model_name_or_path or "bert-base-cased" in model_args.model_name_or_path:
+                logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
+                config.type_vocab_size = 2
+        if need_resize:
+            # we need to rewrite the number of type token a little
+            # during pretraining, there are two types for reberta
+            # during fine-tuning, i think we are only using one?
+            if os.path.isdir(model_args.model_name_or_path):
+                pass
+            else:
+                config.type_vocab_size = 1
+    elif training_args.do_eval or training_args.do_predict:
         if "albert-base-v2" in model_args.model_name_or_path or "bert-base-cased" in model_args.model_name_or_path:
-            logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
             config.type_vocab_size = 2
-    if need_resize:
-        # we need to rewrite the number of type token a little
-        # during pretraining, there are two types for reberta
-        # during fine-tuning, i think we are only using one?
-        if os.path.isdir(model_args.model_name_or_path):
-            pass
-        else:
-            config.type_vocab_size = 1
+
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
@@ -528,77 +620,82 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
     )
-    if need_resize:
-        logger.info("***** Replacing the word_embeddings and token_type_embeddings with random initialized values *****")
-        # this means, we are finetuning directly with new tokenizer.
-        # so the model itself has a different tokenizer, we need to resize.
-        model.resize_token_embeddings(len(tokenizer))
-        # If we resize, we also enforce it to reinit
-        # so we are controlling for weights distribution.
-        random_config = AutoConfig.from_pretrained(
-            model_args.model_name_or_path, 
-            num_labels=num_labels,
-            finetuning_task=data_args.task_name,
-            cache_dir=model_args.cache_dir
-        )
-        # we need to check if type embedding need to be resized as well.
-        tokenizer_config = AutoConfig.from_pretrained(
-            model_args.tokenizer_name, 
-            num_labels=num_labels,
-            finetuning_task=data_args.task_name,
-            cache_dir=model_args.cache_dir
-        )
-        # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
-        random_config.type_vocab_size = tokenizer_config.type_vocab_size
-        random_model = AutoModelForSequenceClassification.from_config(
-            config=random_config,
-        )
-        random_model.resize_token_embeddings(len(tokenizer))
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
-        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     
-    if data_args.reinit_avg_embeddings:
-        logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
-        pretrained_model = AutoModelForSequenceClassification.from_pretrained(
-            model_args.model_name_or_path,
-            from_tf=False,
-            config=config,
-            cache_dir=model_args.cache_dir
-        )
-        avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
-        model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
-        # to keep consistent, we also need to reinit the type embeddings.
-        random_model = AutoModelForSequenceClassification.from_config(
-            config=config,
-        )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
-    elif data_args.reinit_embeddings:
-        logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
-        random_model = AutoModelForSequenceClassification.from_config(config)
-        # random_model.resize_token_embeddings(len(tokenizer))
-        replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
-        model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        # to keep consistent, we also need to reinit the type embeddings.
-        random_model = AutoModelForSequenceClassification.from_config(
-            config=config,
-        )
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
-    else:
-        pass
+    if training_args.do_train:
+        if need_resize:
+            logger.info("***** Replacing the word_embeddings and token_type_embeddings with random initialized values *****")
+            # this means, we are finetuning directly with new tokenizer.
+            # so the model itself has a different tokenizer, we need to resize.
+            model.resize_token_embeddings(len(tokenizer))
+            # If we resize, we also enforce it to reinit
+            # so we are controlling for weights distribution.
+            random_config = AutoConfig.from_pretrained(
+                model_args.model_name_or_path, 
+                num_labels=num_labels,
+                finetuning_task=data_args.task_name,
+                cache_dir=model_args.cache_dir
+            )
+            # we need to check if type embedding need to be resized as well.
+            tokenizer_config = AutoConfig.from_pretrained(
+                model_args.tokenizer_name, 
+                num_labels=num_labels,
+                finetuning_task=data_args.task_name,
+                cache_dir=model_args.cache_dir
+            )
+            # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
+            random_config.type_vocab_size = tokenizer_config.type_vocab_size
+            random_model = AutoModelForSequenceClassification.from_config(
+                config=random_config,
+            )
+            random_model.resize_token_embeddings(len(tokenizer))
+            replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
+            model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
+            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+    
+    if training_args.do_train:
+        if data_args.reinit_avg_embeddings:
+            logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
+            pretrained_model = AutoModelForSequenceClassification.from_pretrained(
+                model_args.model_name_or_path,
+                from_tf=False,
+                config=config,
+                cache_dir=model_args.cache_dir
+            )
+            avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
+            model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
+            # to keep consistent, we also need to reinit the type embeddings.
+            random_model = AutoModelForSequenceClassification.from_config(
+                config=config,
+            )
+            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
+            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+        elif data_args.reinit_embeddings:
+            logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
+            random_model = AutoModelForSequenceClassification.from_config(config)
+            # random_model.resize_token_embeddings(len(tokenizer))
+            replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
+            model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+            # to keep consistent, we also need to reinit the type embeddings.
+            random_model = AutoModelForSequenceClassification.from_config(
+                config=config,
+            )
+            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
+            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+        else:
+            pass
 
-    if data_args.token_swapping:
-        logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
-        original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
-        g = torch.Generator()
-        g.manual_seed(training_args.seed)
-        perm_idx = torch.randperm(original_embeddings.size()[0], generator=g)
-        swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
-        model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
-    elif data_args.word_swapping:
+    if training_args.do_train:
+        if data_args.token_swapping:
+            logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
+            original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
+            g = torch.Generator()
+            g.manual_seed(training_args.seed)
+            perm_idx = torch.randperm(original_embeddings.size()[0], generator=g)
+            swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
+            model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
+
+    if data_args.word_swapping:
         logger.info("***** WARNING: We are swapping words in the inputs. *****")
         token_frequency_map = json.load(open(data_args.swap_vocab_file))
         wikitext_vocab = list(set(token_frequency_map.keys()))
@@ -857,6 +954,22 @@ def main():
 
     # Evaluation
     if training_args.do_eval:
+        
+        # the fixed output file.
+        eval_metrics_output_path = "../glue_evaluation_results.csv"
+        my_file = Path(eval_metrics_output_path)
+        if my_file.is_file():
+            pass
+        else:
+            # we need to write the header.
+            with open(eval_metrics_output_path, mode='w') as csv_file:
+                csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                csv_writer.writerow([
+                    "glue_task", "split", "model", "learning_rate", "tokenizer", "midtuning",
+                    "galactic_shift", "reinit_embedding", "reverse_order", "random_order", 
+                    "token_swap", "word_swap", "metrics", "performance"
+                ])
+            
         logger.info("*** Evaluate ***")
 
         # Loop to handle MNLI double evaluation (matched, mis-matched)
@@ -876,7 +989,16 @@ def main():
 
             trainer.log_metrics("eval", metrics)
             trainer.save_metrics("eval", metrics)
-
+            
+            for m in task_to_metrics[task]:
+                with open(eval_metrics_output_path, mode='a') as csv_file:
+                    csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+                    csv_writer.writerow([
+                        out_glue_task, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
+                        out_galactic_shift, out_reinit_embedding, out_reverse, out_random, 
+                        out_token_s, out_word_s, m, metrics[f"eval_{m}"],
+                    ])
+            
     if training_args.do_predict:
         logger.info("*** Predict ***")
 
