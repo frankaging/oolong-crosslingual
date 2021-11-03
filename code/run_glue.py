@@ -708,7 +708,8 @@ def main():
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
-    
+        assert word_swap_map["hello"] == "mk14"
+
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     logger.info(f"***** Current setups *****")
