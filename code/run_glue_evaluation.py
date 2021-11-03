@@ -11,13 +11,13 @@ import os
 # In[ ]:
 
 
-eval_method = "do_eval"
+eval_method = "do_predict"
 for path in glob("../finetuned_models/*/"):
     print(f"generating results for path at: {path}")
     if "mnli" in path or "qqp" in path:
-        cmd = f"CUDA_VISIBLE_DEVICES=9 python run_glue.py               --model_name_or_path {path}               --{eval_method} --per_device_eval_batch_size 16               --output_dir ../eval_finetuned_models"
+        cmd = f"CUDA_VISIBLE_DEVICES=4 python run_glue.py               --model_name_or_path {path}               --{eval_method} --per_device_eval_batch_size 16               --output_dir ../eval_finetuned_models"
     else:
-        cmd = f"CUDA_VISIBLE_DEVICES=9 python run_glue.py               --model_name_or_path {path}               --{eval_method} --per_device_eval_batch_size 32               --output_dir ../eval_finetuned_models"
+        cmd = f"CUDA_VISIBLE_DEVICES=4 python run_glue.py               --model_name_or_path {path}               --{eval_method} --per_device_eval_batch_size 32               --output_dir ../eval_finetuned_models"
     print(f"starting command")
     os.system(cmd)
 

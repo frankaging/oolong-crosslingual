@@ -426,12 +426,14 @@ def main():
         logger.info("***** WARNING: We are swapping words in the inputs. *****")
         token_frequency_map = json.load(open(model_args.swap_vocab_file))
         wikitext_vocab = list(set(token_frequency_map.keys()))
+        # sort so we have consistent map.
+        wikitext_vocab.sort()
         wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
         random.Random(training_args.seed).shuffle(wikitext_vocab_copy)
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
-    
+
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     # we also enhance this a little bit.

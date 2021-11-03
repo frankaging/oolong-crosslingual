@@ -289,9 +289,9 @@ def main():
     if training_args.do_train:
         os.environ["WANDB_PROJECT"] = f"big_transfer_train"
     elif training_args.do_eval:
-        os.environ["WANDB_PROJECT"] = f"big_transfer_eval"
+        os.environ["WANDB_PROJECT"] = f"DEBUG_big_transfer_eval"
     elif training_args.do_predict:
-        os.environ["WANDB_PROJECT"] = f"big_transfer_predict"
+        os.environ["WANDB_PROJECT"] = f"DEBUG_big_transfer_predict"
     model_args.cache_dir = "./huggingface_inoculation_cache/"
     training_args.save_total_limit = 1
     training_args.output_dir = "../"
@@ -442,8 +442,10 @@ def main():
     logger.info(f"WANDB RUN NAME: {training_args.run_name}")
     if training_args.do_train:
         training_args.output_dir = os.path.join(training_args.output_dir, run_name)
-    else:
-        training_args.output_dir = os.path.join(training_args.output_dir, "eval_finetuned_models", run_name)
+    elif training_args.do_eval:
+        training_args.output_dir = os.path.join(training_args.output_dir, "DEBUG_eval_finetuned_models", run_name)
+    elif training_args.do_predict:
+        training_args.output_dir = os.path.join(training_args.output_dir, "DEBUG_test_finetuned_models", run_name)
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
@@ -699,6 +701,8 @@ def main():
         logger.info("***** WARNING: We are swapping words in the inputs. *****")
         token_frequency_map = json.load(open(data_args.swap_vocab_file))
         wikitext_vocab = list(set(token_frequency_map.keys()))
+        # sort so we have consistent map.
+        wikitext_vocab.sort()
         wikitext_vocab_copy = copy.deepcopy(wikitext_vocab)
         random.Random(training_args.seed).shuffle(wikitext_vocab_copy)
         word_swap_map = {}
