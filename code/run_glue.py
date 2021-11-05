@@ -289,9 +289,9 @@ def main():
     if training_args.do_train:
         os.environ["WANDB_PROJECT"] = f"big_transfer_train"
     elif training_args.do_eval:
-        os.environ["WANDB_PROJECT"] = f"DEBUG_big_transfer_eval"
+        os.environ["WANDB_PROJECT"] = f"big_transfer_eval"
     elif training_args.do_predict:
-        os.environ["WANDB_PROJECT"] = f"DEBUG_big_transfer_predict"
+        os.environ["WANDB_PROJECT"] = f"big_transfer_predict"
     model_args.cache_dir = "./huggingface_inoculation_cache/"
     training_args.save_total_limit = 1
     training_args.output_dir = "../"
@@ -443,9 +443,9 @@ def main():
     if training_args.do_train:
         training_args.output_dir = os.path.join(training_args.output_dir, run_name)
     elif training_args.do_eval:
-        training_args.output_dir = os.path.join(training_args.output_dir, "DEBUG_eval_finetuned_models", run_name)
+        training_args.output_dir = os.path.join(training_args.output_dir, "eval_finetuned_models", run_name)
     elif training_args.do_predict:
-        training_args.output_dir = os.path.join(training_args.output_dir, "DEBUG_test_finetuned_models", run_name)
+        training_args.output_dir = os.path.join(training_args.output_dir, "test_finetuned_models", run_name)
     # Log on each process the small summary:
     logger.warning(
         f"Process rank: {training_args.local_rank}, device: {training_args.device}, n_gpu: {training_args.n_gpu}"
@@ -999,7 +999,7 @@ def main():
                 with open(eval_metrics_output_path, mode='a') as csv_file:
                     csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                     csv_writer.writerow([
-                        out_glue_task, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
+                        tasks, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
                         out_galactic_shift, out_reinit_embedding, out_reverse, out_random, 
                         out_token_s, out_word_s, m, metrics[f"eval_{m}"],
                     ])
