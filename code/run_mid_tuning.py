@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[12]:
+# In[14]:
 
 
 # coding=utf-8
@@ -253,11 +253,15 @@ def main():
         
     logger.info("Generating the run name for WANDB for better experiment tracking.")
     import datetime
+    if "/" in model_args.tokenizer_name:
+        parsed_tokenizer_name = model_args.tokenizer_name.split("/")[-1]
+    else:
+        parsed_tokenizer_name = model_args.tokenizer_name
     date_time = "{}-{}".format(datetime.datetime.now().month, datetime.datetime.now().day)
     run_name = "{0}_{1}_{2}_seed_{3}_data_{4}_inoculation_{5}_reverse_{6}_random_{7}_reinit_emb_{8}_reinit_avg_{9}_token_s_{10}_word_s_{11}_lr_{12}".format(
         date_time,
         model_args.model_name_or_path,
-        model_args.tokenizer_name,
+        parsed_tokenizer_name,
         training_args.seed,
         data_args.train_file.split("/")[-1].split(".")[0],
         data_args.inoculation_percentage,
@@ -338,8 +342,6 @@ def main():
         logger.warning("You are instantiating a new config instance from scratch.")
 
     # this is our own tokenizer
-    TOKENIZER_MAPPING = dict()
-    TOKENIZER_MAPPING["bert"] = 'bert-base-uncased'
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name,
         use_fast=False,
@@ -433,7 +435,7 @@ def main():
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
-        assert word_swap_map["hello"] == "mk14"
+        # assert word_swap_map["hello"] == "mk14"
         
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
+# In[3]:
 
 
 #!/usr/bin/env python
@@ -327,6 +327,12 @@ def main():
         elif "bert-base-cased" in model_args.model_name_or_path:
             out_tokenizer_name = "bert-base-cased"
             out_reinit_embedding = True
+        elif "flaubert_base_cased" in model_args.model_name_or_path:
+            out_tokenizer_name = "flaubert/flaubert_base_cased"
+            out_reinit_embedding = True
+        elif "bert-base-dutch-cased" in model_args.model_name_or_path:
+            out_tokenizer_name = "GroNLP/bert-base-dutch-cased"
+            out_reinit_embedding = True
         else:
             out_tokenizer_name = "roberta-base"
             if "reinit_emb_True" in model_args.model_name_or_path:
@@ -389,6 +395,10 @@ def main():
         model_args.tokenizer_name = "albert-base-v2"
     elif "bert-base-cased" in model_args.model_name_or_path:
         model_args.tokenizer_name = "bert-base-cased"
+    elif "flaubert_base_cased" in model_args.model_name_or_path:
+        model_args.tokenizer_name = "flaubert/flaubert_base_cased"
+    elif "bert-base-dutch-cased" in model_args.model_name_or_path:
+        model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
     else:
         model_args.tokenizer_name = model_args.model_name_or_path
     name_list = model_args.model_name_or_path.split("_")
@@ -573,6 +583,12 @@ def main():
         elif "bert-base-cased" in model_args.model_name_or_path:
             model_args.tokenizer_name = "bert-base-cased"
             need_resize = True
+        elif "flaubert_base_cased" in model_args.model_name_or_path:
+            model_args.tokenizer_name = "flaubert/flaubert_base_cased"
+            need_resize = True
+        elif "bert-base-dutch-cased" in model_args.model_name_or_path:
+            model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
+            need_resize = True
         else:
             model_args.tokenizer_name = "roberta-base"
         if training_args.do_train:
@@ -592,7 +608,7 @@ def main():
     )
     if training_args.do_train:
         if inoculation_p == 1.0 and os.path.isdir(model_args.model_name_or_path):
-            if "albert-base-v2" in model_args.model_name_or_path or "bert-base-cased" in model_args.model_name_or_path:
+            if "albert-base-v2" in model_args.model_name_or_path or                 "bert-base-cased" in model_args.model_name_or_path or                 "flaubert_base_cased" in model_args.model_name_or_path or                 "bert-base-dutch-cased" in model_args.model_name_or_path:
                 logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
                 config.type_vocab_size = 2
         if need_resize:
@@ -604,7 +620,7 @@ def main():
             else:
                 config.type_vocab_size = 1
     elif training_args.do_eval or training_args.do_predict:
-        if "albert-base-v2" in model_args.model_name_or_path or "bert-base-cased" in model_args.model_name_or_path:
+        if "albert-base-v2" in model_args.model_name_or_path or             "bert-base-cased" in model_args.model_name_or_path or             "flaubert_base_cased" in model_args.model_name_or_path or             "bert-base-dutch-cased" in model_args.model_name_or_path:
             config.type_vocab_size = 2
 
     tokenizer = AutoTokenizer.from_pretrained(
