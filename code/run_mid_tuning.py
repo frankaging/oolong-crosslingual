@@ -381,15 +381,22 @@ def main():
             cache_dir=model_args.cache_dir
         )
         # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
-        random_config.type_vocab_size = tokenizer_config.type_vocab_size
+        type_vocab_resize = False
+        try:
+            random_config.type_vocab_size = tokenizer_config.type_vocab_size
+            type_vocab_resize = True
+        except:
+            pass
         random_model = AutoModelForMaskedLM.from_config(
             config=random_config,
         )
         random_model.resize_token_embeddings(len(tokenizer))
         replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
         model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-        replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-        model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+        
+        if type_vocab_resize:
+            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
+            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
 
     if model_args.reinit_avg_embeddings:
         logger.info("***** WARNING: We reinit all embeddings to be the average embedding from the pretrained model. *****")
