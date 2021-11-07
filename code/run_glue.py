@@ -655,6 +655,7 @@ def main():
             )
             if "flaubert_base_cased" in model_args.model_name_or_path:
                 random_config.type_vocab_size = 2
+                return
             # we need to check if type embedding need to be resized as well.
             tokenizer_config = AutoConfig.from_pretrained(
                 model_args.tokenizer_name, 
