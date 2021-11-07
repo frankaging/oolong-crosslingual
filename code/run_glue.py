@@ -608,7 +608,7 @@ def main():
     )
     if training_args.do_train:
         if inoculation_p == 1.0 and os.path.isdir(model_args.model_name_or_path):
-            if "albert-base-v2" in model_args.model_name_or_path or                 "bert-base-cased" in model_args.model_name_or_path or                 "flaubert_base_cased" in model_args.model_name_or_path or                 "bert-base-dutch-cased" in model_args.model_name_or_path:
+            if "albert-base-v2" in model_args.model_name_or_path or                 "bert-base-cased" in model_args.model_name_or_path or                 "bert-base-dutch-cased" in model_args.model_name_or_path:
                 logger.info(f"***** WARNING: Reconfig type_vocab_size for mid-tuned models *****")
                 config.type_vocab_size = 2
         if need_resize:
@@ -653,6 +653,8 @@ def main():
                 finetuning_task=data_args.task_name,
                 cache_dir=model_args.cache_dir
             )
+            if "flaubert_base_cased" in model_args.model_name_or_path:
+                random_config.type_vocab_size = 2
             # we need to check if type embedding need to be resized as well.
             tokenizer_config = AutoConfig.from_pretrained(
                 model_args.tokenizer_name, 
