@@ -684,9 +684,8 @@ def main():
                 config=random_config,
             )
             replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-            print(replacing_type_embeddings.shape)
-            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
-            return
+            # just swap the second one for randomly initialized weights.
+            model.roberta.embeddings.token_type_embeddings.weight.data[1] = replacing_type_embeddings[1]
     
     if training_args.do_train:
         if data_args.reinit_avg_embeddings:
