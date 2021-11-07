@@ -653,9 +653,6 @@ def main():
                 finetuning_task=data_args.task_name,
                 cache_dir=model_args.cache_dir
             )
-            if "flaubert_base_cased" in model_args.model_name_or_path:
-                random_config.type_vocab_size = 2
-                return
             # we need to check if type embedding need to be resized as well.
             tokenizer_config = AutoConfig.from_pretrained(
                 model_args.tokenizer_name, 
@@ -673,6 +670,23 @@ def main():
             model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
             replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
             model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+        if "flaubert_base_cased" in model_args.model_name_or_path:
+            # If we resize, we also enforce it to reinit
+            # so we are controlling for weights distribution.
+            random_config = AutoConfig.from_pretrained(
+                model_args.model_name_or_path, 
+                num_labels=num_labels,
+                finetuning_task=data_args.task_name,
+                cache_dir=model_args.cache_dir
+            )
+            random_config.type_vocab_size = 2
+            random_model = AutoModelForSequenceClassification.from_config(
+                config=random_config,
+            )
+            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
+            print(replacing_type_embeddings.shape)
+            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+            return
     
     if training_args.do_train:
         if data_args.reinit_avg_embeddings:
