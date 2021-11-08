@@ -661,8 +661,10 @@ def main():
                 cache_dir=model_args.cache_dir
             )
             # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
-            if "flaubert_base_cased" not in model_args.model_name_or_path:
+            try:
                 random_config.type_vocab_size = tokenizer_config.type_vocab_size
+            except:
+                random_config.type_vocab_size = 2
             random_model = AutoModelForSequenceClassification.from_config(
                 config=random_config,
             )
