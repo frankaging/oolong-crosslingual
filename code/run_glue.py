@@ -661,7 +661,8 @@ def main():
                 cache_dir=model_args.cache_dir
             )
             # IMPORTANT: THIS ENSURES TYPE WILL NOT CAUSE UNREF POINTER ISSUE.
-            random_config.type_vocab_size = tokenizer_config.type_vocab_size
+            if "flaubert_base_cased" not in model_args.model_name_or_path:
+                random_config.type_vocab_size = tokenizer_config.type_vocab_size
             random_model = AutoModelForSequenceClassification.from_config(
                 config=random_config,
             )
@@ -670,7 +671,7 @@ def main():
             model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
             replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
             model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
-        if "flaubert_base_cased" in model_args.model_name_or_path:
+        if "flaubert_base_cased" in model_args.model_name_or_path and inoculation_p == 1.0:
             # If we resize, we also enforce it to reinit
             # so we are controlling for weights distribution.
             random_config = AutoConfig.from_pretrained(
