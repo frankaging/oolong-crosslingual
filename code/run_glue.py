@@ -621,7 +621,7 @@ def main():
                 config.type_vocab_size = 1
     elif training_args.do_eval or training_args.do_predict:
         if "albert-base-v2" in model_args.model_name_or_path or             "bert-base-cased" in model_args.model_name_or_path or             "flaubert_base_cased" in model_args.model_name_or_path or             "bert-base-dutch-cased" in model_args.model_name_or_path:
-            config.type_vocab_size = 2
+            config.type_vocab_size = 1
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
