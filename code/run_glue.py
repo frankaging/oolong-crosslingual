@@ -621,7 +621,7 @@ def main():
                 config.type_vocab_size = 1
     elif training_args.do_eval or training_args.do_predict:
         if "albert-base-v2" in model_args.model_name_or_path or             "bert-base-cased" in model_args.model_name_or_path or             "flaubert_base_cased" in model_args.model_name_or_path or             "bert-base-dutch-cased" in model_args.model_name_or_path:
-            config.type_vocab_size = 1
+            config.type_vocab_size = 2
 
     tokenizer = AutoTokenizer.from_pretrained(
         model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path,
@@ -745,7 +745,7 @@ def main():
         word_swap_map = {}
         for i in range(len(wikitext_vocab)):
             word_swap_map[wikitext_vocab[i]] = wikitext_vocab_copy[i]
-        assert word_swap_map["hello"] == "mk14"
+        # assert word_swap_map["hello"] == "mk14"
 
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
@@ -1036,7 +1036,7 @@ def main():
                 with open(eval_metrics_output_path, mode='a') as csv_file:
                     csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                     csv_writer.writerow([
-                        tasks, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
+                        task, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
                         out_galactic_shift, out_reinit_embedding, out_reverse, out_random, 
                         out_token_s, out_word_s, m, metrics[f"eval_{m}"],
                     ])
