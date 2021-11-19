@@ -1,3 +1,4 @@
+*finetuned_models*/
 *.csv
 glue_evaluation_results.csv
 *_cache/

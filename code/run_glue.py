@@ -328,10 +328,10 @@ def main():
             out_tokenizer_name = "bert-base-cased"
             out_reinit_embedding = True
         elif "flaubert_base_cased" in model_args.model_name_or_path:
-            out_tokenizer_name = "flaubert/flaubert_base_cased"
+            out_tokenizer_name = "flaubert_base_cased"
             out_reinit_embedding = True
         elif "bert-base-dutch-cased" in model_args.model_name_or_path:
-            out_tokenizer_name = "GroNLP/bert-base-dutch-cased"
+            out_tokenizer_name = "bert-base-dutch-cased"
             out_reinit_embedding = True
         else:
             out_tokenizer_name = "roberta-base"
@@ -1007,7 +1007,7 @@ def main():
             with open(eval_metrics_output_path, mode='w') as csv_file:
                 csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                 csv_writer.writerow([
-                    "glue_task", "split", "model", "learning_rate", "tokenizer", "midtuning",
+                    "glue_task", "split", "seed", "model", "learning_rate", "tokenizer", "midtuning",
                     "galactic_shift", "reinit_embedding", "reverse_order", "random_order", 
                     "token_swap", "word_swap", "metrics", "performance"
                 ])
@@ -1036,7 +1036,7 @@ def main():
                 with open(eval_metrics_output_path, mode='a') as csv_file:
                     csv_writer = csv.writer(csv_file, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
                     csv_writer.writerow([
-                        task, "eval", out_model, out_lr, out_tokenizer_name, out_midtuning, 
+                        task, "eval", training_args.seed, out_model, out_lr, out_tokenizer_name, out_midtuning, 
                         out_galactic_shift, out_reinit_embedding, out_reverse, out_random, 
                         out_token_s, out_word_s, m, metrics[f"eval_{m}"],
                     ])
