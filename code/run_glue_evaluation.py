@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[44]:
+# In[1]:
 
 
 from glob import glob
@@ -12,7 +12,7 @@ import os
 
 
 eval_method = "do_eval"
-eval_model_path = "../finetuned_models_88/"
+eval_model_path = "../stage_finetuned_models/"
 wandb_panel = "ICLR_GLUE_eval"
 
 
@@ -21,7 +21,7 @@ wandb_panel = "ICLR_GLUE_eval"
 
 for path in glob(f"{eval_model_path}/*/"):
     print(f"generating results for path at: {path}")
-    cmd = f"CUDA_VISIBLE_DEVICES=8 python run_glue.py           --model_name_or_path {path}           --{eval_method} --per_device_eval_batch_size 64           --output_dir ../eval_finetuned_models"
+    cmd = f"CUDA_VISIBLE_DEVICES=1,4,5,6 python run_glue.py           --model_name_or_path {path}           --{eval_method} --per_device_eval_batch_size 32           --output_dir ../eval_finetuned_models           --report_to none"
     print(f"starting command")
     os.system(cmd)
 

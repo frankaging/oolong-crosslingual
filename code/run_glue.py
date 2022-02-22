@@ -285,13 +285,14 @@ def main():
 
     # we hard-code these arguments just to make life eaiser!
     os.environ["TRANSFORMERS_CACHE"] = "./huggingface_inoculation_cache/"
+    os.environ["WANDB_DISABLED"] = "true"
     # with this, we could log into different places and interprete results directly.
-    if training_args.do_train:
-        os.environ["WANDB_PROJECT"] = f"big_transfer_train"
-    elif training_args.do_eval:
-        os.environ["WANDB_PROJECT"] = f"big_transfer_eval"
-    elif training_args.do_predict:
-        os.environ["WANDB_PROJECT"] = f"big_transfer_predict"
+#     if training_args.do_train:
+#         os.environ["WANDB_PROJECT"] = f"big_transfer_train"
+#     elif training_args.do_eval:
+#         os.environ["WANDB_PROJECT"] = f"big_transfer_eval"
+#     elif training_args.do_predict:
+#         os.environ["WANDB_PROJECT"] = f"big_transfer_predict"
     model_args.cache_dir = "./huggingface_inoculation_cache/"
     training_args.save_total_limit = 1
     training_args.output_dir = "../"
@@ -386,7 +387,8 @@ def main():
         training_args.learning_rate = 4e-05
     else:
         training_args.learning_rate = 2e-05
-    
+        
+        
     # this is for evaluation!
     condition_name = model_args.model_name_or_path
     
