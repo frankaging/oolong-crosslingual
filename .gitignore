@@ -1,3 +1,5 @@
+post_emnlp_eval_glue.sh
+post_emnlp_run_glue.sh
 *finetuned_models*/
 *.csv
 glue_evaluation_results.csv
