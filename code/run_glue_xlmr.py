@@ -833,8 +833,6 @@ def main():
     logger.info(f"***** model type: {model_args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     
-    FAIL()
-    
     assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
     
     def reverse_order(example):
