@@ -338,7 +338,7 @@ def main():
                 break
         assert data_args.task_name in list(task_to_keys.keys())
         out_glue_task = data_args.task_name
-        out_model = "xlm-roberta-base" if "xlm-roberta-base" in model_args.model_name_or_path else "roberta-base"
+        out_model = "deberta-v3-base" if "deberta-v3-base" in model_args.model_name_or_path else "roberta-base"
         if "albert-base-v2" in model_args.model_name_or_path:
             out_tokenizer_name = "albert-base-v2"
             out_reinit_embedding = True
@@ -351,11 +351,14 @@ def main():
         elif "bert-base-dutch-cased" in model_args.model_name_or_path:
             out_tokenizer_name = "bert-base-dutch-cased"
             out_reinit_embedding = True
+        elif "bert-base-dutch-cased" in model_args.model_name_or_path:
+            out_tokenizer_name = "bert-base-dutch-cased"
+            out_reinit_embedding = True
         elif "bert-base-japanese" in model_args.model_name_or_path:
             out_tokenizer_name = "bert-base-japanese"
             out_reinit_embedding = True
         else:
-            out_tokenizer_name = "xlm-roberta-base"
+            out_tokenizer_name = "roberta-base"
             if "reinit_emb_True" in model_args.model_name_or_path:
                 out_reinit_embedding = True
             else:
@@ -433,8 +436,6 @@ def main():
         model_args.tokenizer_name = "GroNLP/bert-base-dutch-cased"
     elif "bert-base-japanese" in model_args.model_name_or_path:
         model_args.tokenizer_name = "bert-base-chinese"
-    elif "xlm-roberta-base" in model_args.model_name_or_path:
-        model_args.tokenizer_name = "xlm-roberta-base"
     else:
         model_args.tokenizer_name = model_args.model_name_or_path
     name_list = model_args.model_name_or_path.split("_")
@@ -641,10 +642,10 @@ def main():
             model_args.tokenizer_name = "bert-base-chinese"
             need_resize = True
         else:
-            model_args.tokenizer_name = "xlm-roberta-base" if "xlm-roberta-base" in model_args.model_name_or_path else "roberta-base"
+            model_args.tokenizer_name = "microsoft/deberta-v3-base" if "deberta-v3-base" in model_args.model_name_or_path else "roberta-base"
         if training_args.do_train:
             # we can support more model arch if specified.
-            model_args.model_name_or_path = "xlm-roberta-base" if "xlm-roberta-base" in model_args.model_name_or_path else "roberta-base"
+            model_args.model_name_or_path = "microsoft/deberta-v3-base" if "deberta-v3-base" in model_args.model_name_or_path else "roberta-base"
         
     # Load pretrained model and tokenizer
     #
@@ -692,6 +693,8 @@ def main():
     )
     
     if training_args.do_train:
+        if model_args.model_name_or_path == "microsoft/deberta-v3-base":
+            model.resize_token_embeddings(len(tokenizer))
         if need_resize:
             if data_args.reinit_closest_embeddings:
                 logger.info("***** Replacing the word_embeddings "
@@ -703,8 +706,8 @@ def main():
                             "and token_type_embeddings with random "
                             "sampled rows from current embedding matrix *****")
                 # swapping embeddings
-                original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
-                len_model_original_tokenizer = model.roberta.embeddings.word_embeddings.weight.data.shape[0]
+                original_embeddings = model.deberta.embeddings.word_embeddings.weight.data.clone()
+                len_model_original_tokenizer = model.deberta.embeddings.word_embeddings.weight.data.shape[0]
                 g = torch.Generator()
                 g.manual_seed(training_args.seed)
                 perm_idx = torch.randperm(original_embeddings.size()[0], generator=g)
@@ -717,14 +720,14 @@ def main():
                 if len_tokenizer > len_model_original_tokenizer:
                     # in case we need it, here it is the avg embeddings.
                     avg_embeddings = torch.mean(
-                        model.roberta.embeddings.word_embeddings.weight.data, dim=0
+                        model.deberta.embeddings.word_embeddings.weight.data, dim=0
                     )
                     append_avg_embeddings = []
                     for _ in range(len_tokenizer-len_model_original_tokenizer):
                         append_avg_embeddings += [avg_embeddings] 
                     append_avg_embeddings = torch.stack(append_avg_embeddings, dim=0)
                     swapped_embeddings = torch.cat([swapped_embeddings, append_avg_embeddings], dim=0)
-                model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings[:len(tokenizer)]
+                model.deberta.embeddings.word_embeddings.weight.data = swapped_embeddings[:len(tokenizer)]
                 
                 # to keep consistent, we use a random model to reinit the type embeddings as well.
                 # If we resize, we also enforce it to reinit
@@ -750,8 +753,8 @@ def main():
                 random_model = AutoModelForSequenceClassification.from_config(
                     config=random_config,
                 )
-                replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-                model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+                replacing_type_embeddings = random_model.deberta.embeddings.token_type_embeddings.weight.data.clone()
+                model.deberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
             else:
                 logger.info("***** Replacing the word_embeddings "
                             "and token_type_embeddings with random "
@@ -783,10 +786,10 @@ def main():
                     config=random_config,
                 )
                 random_model.resize_token_embeddings(len(tokenizer))
-                replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
-                model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
-                replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-                model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+                replacing_embeddings = random_model.deberta.embeddings.word_embeddings.weight.data.clone()
+                model.deberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+                replacing_type_embeddings = random_model.deberta.embeddings.token_type_embeddings.weight.data.clone()
+                model.deberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
             
         if "flaubert_base_cased" in model_args.model_name_or_path and inoculation_p == 1.0:
             # If we resize, we also enforce it to reinit
@@ -801,11 +804,11 @@ def main():
             random_model = AutoModelForSequenceClassification.from_config(
                 config=random_config,
             )
-            replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-            replacing_type_embeddings[1] = model.roberta.embeddings.token_type_embeddings.weight.data[0]
+            replacing_type_embeddings = random_model.deberta.embeddings.token_type_embeddings.weight.data.clone()
+            replacing_type_embeddings[1] = model.deberta.embeddings.token_type_embeddings.weight.data[0]
             
             # just swap the second one for randomly initialized weights.
-            model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+            model.deberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
     
     if training_args.do_train:
         if data_args.reinit_avg_embeddings:
@@ -816,33 +819,33 @@ def main():
                 config=config,
                 cache_dir=model_args.cache_dir
             )
-            avg_embeddings = torch.mean(pretrained_model.roberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.roberta.embeddings.word_embeddings.weight.data)
-            model.roberta.embeddings.word_embeddings.weight.data = avg_embeddings
+            avg_embeddings = torch.mean(pretrained_model.deberta.embeddings.word_embeddings.weight.data, dim=0).expand_as(model.deberta.embeddings.word_embeddings.weight.data)
+            model.deberta.embeddings.word_embeddings.weight.data = avg_embeddings
             # to keep consistent, we also need to reinit the type embeddings.
             random_model = AutoModelForSequenceClassification.from_config(
                 config=config,
             )
-            # replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-            # model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+            replacing_type_embeddings = random_model.deberta.embeddings.token_type_embeddings.weight.data.clone()
+            model.deberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
         elif data_args.reinit_embeddings:
             if data_args.reinit_cls_only:
                 logger.info("***** WARNING: We reinit only CLS embeddings to be the randomly initialized embeddings. *****")
                 random_model = AutoModelForSequenceClassification.from_config(config)
                 # random_model.resize_token_embeddings(len(tokenizer))
-                replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
-                model.roberta.embeddings.word_embeddings.weight.data[0] = replacing_embeddings[0]
+                replacing_embeddings = random_model.deberta.embeddings.word_embeddings.weight.data.clone()
+                model.deberta.embeddings.word_embeddings.weight.data[0] = replacing_embeddings[0]
             else:
                 logger.info("***** WARNING: We reinit all embeddings to be the randomly initialized embeddings. *****")
                 random_model = AutoModelForSequenceClassification.from_config(config)
                 # random_model.resize_token_embeddings(len(tokenizer))
-                replacing_embeddings = random_model.roberta.embeddings.word_embeddings.weight.data.clone()
-                model.roberta.embeddings.word_embeddings.weight.data = replacing_embeddings
+                replacing_embeddings = random_model.deberta.embeddings.word_embeddings.weight.data.clone()
+                model.deberta.embeddings.word_embeddings.weight.data = replacing_embeddings
                 # to keep consistent, we also need to reinit the type embeddings.
                 random_model = AutoModelForSequenceClassification.from_config(
                     config=config,
                 )
-                # replacing_type_embeddings = random_model.roberta.embeddings.token_type_embeddings.weight.data.clone()
-                # model.roberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
+                replacing_type_embeddings = random_model.deberta.embeddings.token_type_embeddings.weight.data.clone()
+                model.deberta.embeddings.token_type_embeddings.weight.data = replacing_type_embeddings
                 if data_args.train_embeddings_only:
                     logger.info("***** WARNING: Freeze all other layers, just train the embeddings *****")
                     # set off the gradients among all other layers.
@@ -859,12 +862,12 @@ def main():
     if training_args.do_train:
         if data_args.token_swapping:
             logger.info("***** WARNING: We are swapping tokens via embeddings. *****")
-            original_embeddings = model.roberta.embeddings.word_embeddings.weight.data.clone()
+            original_embeddings = model.deberta.embeddings.word_embeddings.weight.data.clone()
             g = torch.Generator()
             g.manual_seed(training_args.seed)
             perm_idx = torch.randperm(original_embeddings.size()[0], generator=g)
             swapped_embeddings = original_embeddings.index_select(dim=0, index=perm_idx)
-            model.roberta.embeddings.word_embeddings.weight.data = swapped_embeddings
+            model.deberta.embeddings.word_embeddings.weight.data = swapped_embeddings
 
     if data_args.word_swapping:
         logger.info("***** WARNING: We are swapping words in the inputs. *****")
@@ -883,7 +886,7 @@ def main():
     logger.info(f"***** model type: {model_args.model_name_or_path} *****")
     logger.info(f"***** tokenizer type: {model_args.tokenizer_name} *****")
     
-    assert len(tokenizer) == model.roberta.embeddings.word_embeddings.weight.data.shape[0]
+    assert len(tokenizer) == model.deberta.embeddings.word_embeddings.weight.data.shape[0]
     
     def reverse_order(example):
         fields = task_to_keys[data_args.task_name]
