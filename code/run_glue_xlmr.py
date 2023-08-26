@@ -61,6 +61,9 @@ require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/text
 task_to_keys = {
     "cola": ("sentence", None),
     "mnli": ("premise", "hypothesis"),
+    "xnli-en": ("premise", "hypothesis"),
+    "xnli-es": ("premise", "hypothesis"),
+    "xnli-zh": ("premise", "hypothesis"),
     "mrpc": ("sentence1", "sentence2"),
     "qnli": ("question", "sentence"),
     "qqp": ("question1", "question2"),
@@ -73,6 +76,9 @@ task_to_keys = {
 task_to_metrics = {
     "cola": ["matthews_correlation"],
     "mnli": ["accuracy"],
+    "xnli-en": ["accuracy"],
+    "xnli-es": ["accuracy"],
+    "xnli-zh": ["accuracy"],
     "mnli_mismatched": ["accuracy"],
     "mnli_matched": ["accuracy"],
     "mnli-mm": ["accuracy"],
@@ -97,7 +103,7 @@ def random_corrupt(task, tokenizer, vocab_match, example):
             corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
             example[task_to_keys[task][0]] = corrupted_sentence
     # for tasks that have two sentences
-    elif task == "mrpc" or task == "mnli" or task == "snli" or task == "qnli" or task == "qqp" or task == "rte" or task == "stsb" or task == "wnli":
+    elif task == "mrpc" or task == "mnli" or "xnli" in task or task == "snli" or task == "qnli" or task == "qqp" or task == "rte" or task == "stsb" or task == "wnli":
         original_sentence = example[task_to_keys[task][0]]
         if original_sentence != None and original_sentence.strip() != "" and original_sentence.strip() != "None":
             corrupted_sentence = corrupt_translator(original_sentence, tokenizer, vocab_match)
@@ -546,7 +552,10 @@ def main():
         # download the dataset.
         if data_args.task_name is not None:
             # Downloading and loading a dataset from the hub.
-            raw_datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
+            if "xnli" in data_args.task_name:
+                raw_datasets = load_dataset("xnli", data_args.task_name.split("-")[1], cache_dir=model_args.cache_dir)
+            else:    
+                raw_datasets = load_dataset("glue", data_args.task_name, cache_dir=model_args.cache_dir)
         elif data_args.dataset_name is not None:
             # Downloading and loading a dataset from the hub.
             raw_datasets = load_dataset(
@@ -1068,7 +1077,10 @@ def main():
 
     # Get the metric function
     if data_args.task_name is not None:
-        metric = load_metric("glue", data_args.task_name)
+        if  "xnli" in data_args.task_name:
+            metric = load_metric("glue", "mnli")
+        else:
+            metric = load_metric("glue", data_args.task_name)
     else:
         metric = load_metric("accuracy")
 
